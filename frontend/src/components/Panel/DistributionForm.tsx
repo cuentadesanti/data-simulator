@@ -3,6 +3,7 @@ import type { ParamValue, LookupValue } from '../../types/dag';
 import type { DistributionInfo } from '../../services/api';
 import { useDAGStore } from '../../stores/dagStore';
 import { distributionsApi } from '../../services/api';
+import { FormulaInput } from './FormulaInput';
 
 interface DistributionFormProps {
   nodeId: string;
@@ -109,12 +110,12 @@ const ParamInput: React.FC<ParamInputProps> = ({
 
     if (inputType === 'formula') {
       return (
-        <input
-          type="text"
+        <FormulaInput
           value={typeof value === 'string' ? value : ''}
-          onChange={(e) => handleChange(e.target.value)}
-          placeholder="e.g., node_1 * 2 + 5"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
+          onChange={(newValue) => handleChange(newValue)}
+          nodeId={nodeId}
+          placeholder="e.g., parent_var * 2 + 5"
+          compact
         />
       );
     }
