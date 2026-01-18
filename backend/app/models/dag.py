@@ -165,15 +165,30 @@ class NodeConfig(BaseModel):
 
     @property
     def effective_var_name(self) -> str:
-        """Get the effective variable name (explicit or node ID).
-        
-        Returns var_name if explicitly set, otherwise uses the node ID.
-        This makes formulas more intuitive since developers can reference
-        nodes by their IDs directly.
+        """Get the effective variable name (explicit or derived from name).
+
+        Returns var_name if explicitly set, otherwise converts the node name
+        to snake_case (e.g., "Deterministic 4" -> "deterministic_4").
+        This matches the frontend behavior.
         """
         if self.var_name:
             return self.var_name
-        return self.id
+        return self._to_snake_case(self.name)
+
+    @staticmethod
+    def _to_snake_case(name: str) -> str:
+        """Convert a name to snake_case variable format."""
+        # Replace common separators with spaces
+        result = re.sub(r"[-\s]+", " ", name)
+        # Remove non-alphanumeric characters (except spaces)
+        result = re.sub(r"[^a-zA-Z0-9\s]", "", result)
+        # Split into words and join with underscores
+        words = result.strip().lower().split()
+        result = "_".join(words)
+        # Ensure it starts with a letter or underscore
+        if result and result[0].isdigit():
+            result = "_" + result
+        return result or "unnamed"
 
     @model_validator(mode="after")
     def validate_mece(self) -> "NodeConfig":
