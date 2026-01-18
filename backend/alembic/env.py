@@ -9,10 +9,14 @@ from alembic import context
 # Import the database Base and models for autogenerate support
 from app.db.database import Base
 from app.db import models  # noqa: F401 - Import to register models with Base
+from app.core.config import settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Override sqlalchemy.url with settings from app config
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
