@@ -2,19 +2,30 @@
 
 ## Quick Start
 
-### 1. Add GitHub Secret
+### 1. Add GitHub Secrets
 
 Go to your repository on GitHub:
 
 1. Navigate to `Settings` → `Secrets and variables` → `Actions`
 2. Click `New repository secret`
-3. Add the following:
+3. Add the following secrets:
+
+**Secret 1: Database URL**
 
 **Name:** `DS_DATABASE_URL`
 
 **Value:** Your Supabase pooled PostgreSQL connection string:
 ```
 postgresql+psycopg://[user]:[password]@aws-1-eu-west-1.pooler.supabase.com:5432/postgres
+```
+
+**Secret 2: Render Deploy Hook**
+
+**Name:** `RENDER_DEPLOY_HOOK_URL`
+
+**Value:** Your Render deploy hook URL (from Render dashboard → Settings → Deploy Hook)
+```
+https://api.render.com/deploy/srv-xxxxxxxxxxxxx?key=xxxxxxxxxxxxxx
 ```
 
 ### 2. Verify Workflow
@@ -25,7 +36,8 @@ It will automatically:
 - ✅ Run on every push to `main` that touches `backend/`
 - ✅ Run tests with SQLite
 - ✅ Apply migrations to your Supabase database
-- ✅ Complete before Render starts deploying
+- ✅ Trigger Render deployment via deploy hook
+- ✅ Render deploys only after migrations succeed
 
 ### 3. Test the Setup
 
@@ -51,9 +63,10 @@ Ensure your Render service has:
 - `DS_DATABASE_URL` = Same Supabase URL as GitHub secret
 
 **Auto-Deploy:**
-- ✅ Enabled for `main` branch
+- ❌ **Disabled** (deployments are triggered by GitHub Actions)
 
-**No Pre-Deploy Command needed** (migrations run in GitHub Actions)
+**Deploy Hook:**
+- ✅ Created and added to GitHub secrets as `RENDER_DEPLOY_HOOK_URL`
 
 ## Workflow Diagram
 
@@ -65,6 +78,8 @@ GitHub Actions triggered
     Run pytest
          ↓
   Apply migrations
+         ↓
+ Trigger Render deploy
          ↓
     Render deploys
          ↓
