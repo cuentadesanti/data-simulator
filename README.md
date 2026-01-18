@@ -34,35 +34,56 @@ A visual tool for generating synthetic datasets from probabilistic DAG (Directed
 
 ### Prerequisites
 
-- Python 3.11+
-- Node.js 20+
-- uv (Python package manager) - `pip install uv`
+- **Python 3.11+**
+- **Node.js 20+** (npm or pnpm)
+- **uv** (Recommended Python package manager) - `pip install uv`
+- **PostgreSQL** (or Supabase instance)
 
 ### Backend Setup
 
-```bash
-cd backend
+1. **Environment Configuration**:
+   Create a `backend/.env` file from the template:
+   ```bash
+   cd backend
+   cp .env.example .env
+   ```
+   Modify `DS_DATABASE_URL` with your Supabase or local Postgres connection string.
 
-# Install dependencies
-uv sync
+2. **Dependency Installation**:
+   ```bash
+   uv sync
+   ```
 
-# Run development server
-uv run uvicorn app.main:app --reload
-```
+3. **Database Migrations**:
+   ```bash
+   uv run alembic upgrade head
+   ```
+
+4. **Run Server**:
+   ```bash
+   uv run uvicorn app.main:app --reload
+   ```
 
 The API will be available at `http://localhost:8000`.
 
 ### Frontend Setup
 
-```bash
-cd frontend
+1. **Install dependencies**:
+   ```bash
+   cd frontend
+   npm install
+   ```
 
-# Install dependencies
-npm install
+2. **Environment Configuration**:
+   Create `frontend/.env`:
+   ```env
+   VITE_API_BASE_URL=http://localhost:8000
+   ```
 
-# Run development server
-npm run dev
-```
+3. **Run development server**:
+   ```bash
+   npm run dev
+   ```
 
 The app will be available at `http://localhost:5173`.
 

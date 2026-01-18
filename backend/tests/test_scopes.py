@@ -129,7 +129,8 @@ class TestGlobalScope:
         df1, _, _ = _generate_data(dag, 100, seed=42)
         df2, _, _ = _generate_data(dag, 100, seed=42)
 
-        assert df1["global_rate"].iloc[0] == df2["global_rate"].iloc[0]
+        # Column name is "rate" (snake_cased name)
+        assert df1["rate"].iloc[0] == df2["rate"].iloc[0]
 
     def test_global_scope_with_different_sample_sizes(self):
         """Global value is the same regardless of sample size."""
@@ -184,7 +185,7 @@ class TestGlobalScope:
                     kind="deterministic",
                     dtype="float",
                     scope="row",
-                    formula="salary * (1 + inflation)",
+                    formula="base_salary * (1 + inflation_rate)",
                 ),
             ],
             edges=[
@@ -196,12 +197,12 @@ class TestGlobalScope:
 
         df, _, _ = _generate_data(dag, 100, seed=42)
 
-        # inflation should be same for all rows
-        assert df["inflation"].nunique() == 1
+        # inflation_rate should be same for all rows
+        assert df["inflation_rate"].nunique() == 1
 
-        # adjusted_salary should use the global inflation
-        inflation = df["inflation"].iloc[0]
-        expected = df["salary"] * (1 + inflation)
+        # adjusted_salary should use the global inflation_rate
+        inflation = df["inflation_rate"].iloc[0]
+        expected = df["base_salary"] * (1 + inflation)
         assert np.allclose(df["adjusted_salary"], expected)
 
 
@@ -597,7 +598,7 @@ class TestScopeDeterminism:
         results = []
         for _ in range(5):
             df, _, _ = _generate_data(dag, 50, seed=999)
-            results.append(df["global_val"].iloc[0])
+            results.append(df["global"].iloc[0])
 
         # All runs should produce the same value
         assert all(v == results[0] for v in results)
