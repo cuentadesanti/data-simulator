@@ -176,9 +176,14 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
       }
     },
 
-    // Create a new project
+    // Create a new project (starts with empty DAG)
     createProject: async (name: string, description?: string) => {
       const dagStore = useDAGStore.getState();
+
+      // Clear the current DAG to start fresh
+      dagStore.clearDAG();
+
+      // Get the empty DAG state
       const dag = dagStore.exportDAG();
 
       const project = await projectsApi.create({
