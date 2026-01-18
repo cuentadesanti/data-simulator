@@ -37,7 +37,6 @@ export interface PostProcessing {
 export interface NodeConfig {
   id: string;
   name: string;
-  var_name?: string; // Custom variable name for formulas/output (defaults to snake_case of name)
   kind: NodeKind;
   dtype?: NodeDtype;
   scope: NodeScope;
@@ -65,7 +64,7 @@ export function toSnakeCase(name: string): string {
 
 // Get effective var_name (explicit or derived from name)
 export function getEffectiveVarName(node: NodeConfig): string {
-  return node.var_name || toSnakeCase(node.name);
+  return toSnakeCase(node.name);
 }
 
 // Edge configuration

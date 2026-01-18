@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { HelpCircle, Edit2, Check, X } from 'lucide-react';
+import { HelpCircle } from 'lucide-react';
 import type { NodeConfig, NodeKind, NodeDtype, NodeScope } from '../../types/dag';
-import { toSnakeCase, getEffectiveVarName } from '../../types/dag';
+import { getEffectiveVarName } from '../../types/dag';
 import { useDAGStore } from '../../stores/dagStore';
 
 const SCOPE_INFO: Record<NodeScope, { description: string; example: string }> = {
@@ -30,49 +30,9 @@ export const BasicInfo: React.FC<BasicInfoProps> = ({ nodeId, config }) => {
   const updateNode = useDAGStore((state) => state.updateNode);
   const nodes = useDAGStore((state) => state.nodes);
   const [showScopeHelp, setShowScopeHelp] = useState(false);
-  const [isEditingVarName, setIsEditingVarName] = useState(false);
-  const [tempVarName, setTempVarName] = useState('');
 
   // Compute effective var_name (custom or derived from name)
   const effectiveVarName = useMemo(() => getEffectiveVarName(config), [config]);
-  const derivedVarName = useMemo(() => toSnakeCase(config.name), [config.name]);
-  const isCustomVarName = config.var_name !== undefined && config.var_name !== '';
-
-  // Validate var_name pattern (lowercase, underscores, starting with letter or underscore)
-  const isValidVarName = (name: string) => /^[a-z_][a-z0-9_]*$/.test(name);
-
-  // Check for duplicate var_names across all nodes
-  const isDuplicateVarName = (varName: string) => {
-    return nodes.some((n) => {
-      if (n.id === nodeId) return false;
-      return getEffectiveVarName(n.data.config) === varName;
-    });
-  };
-
-  const startEditingVarName = () => {
-    setTempVarName(config.var_name || derivedVarName);
-    setIsEditingVarName(true);
-  };
-
-  const saveVarName = () => {
-    const trimmed = tempVarName.trim();
-    // If empty or same as derived, clear custom var_name
-    if (!trimmed || trimmed === derivedVarName) {
-      updateNode(nodeId, { var_name: undefined });
-    } else if (isValidVarName(trimmed) && !isDuplicateVarName(trimmed)) {
-      updateNode(nodeId, { var_name: trimmed });
-    }
-    setIsEditingVarName(false);
-  };
-
-  const cancelEditingVarName = () => {
-    setIsEditingVarName(false);
-  };
-
-  const resetToDefault = () => {
-    updateNode(nodeId, { var_name: undefined });
-    setIsEditingVarName(false);
-  };
 
   // Get available categorical nodes for group_by dropdown
   const categoricalNodes = nodes
@@ -133,88 +93,17 @@ export const BasicInfo: React.FC<BasicInfoProps> = ({ nodeId, config }) => {
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Variable Name
           <span className="ml-1 text-xs text-gray-500 font-normal">
-            (used in formulas & output)
+            (auto-generated)
           </span>
         </label>
-        {isEditingVarName ? (
-          <div className="space-y-2">
-            <input
-              type="text"
-              value={tempVarName}
-              onChange={(e) =>
-                setTempVarName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))
-              }
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveVarName();
-                if (e.key === 'Escape') cancelEditingVarName();
-              }}
-              autoFocus
-              className={`w-full px-3 py-2 font-mono text-sm border rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                !isValidVarName(tempVarName) || isDuplicateVarName(tempVarName)
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-gray-300'
-              }`}
-              placeholder="variable_name"
-            />
-            {!isValidVarName(tempVarName) && (
-              <p className="text-xs text-red-600">
-                Must start with letter/underscore, contain only lowercase letters, numbers,
-                underscores
-              </p>
-            )}
-            {isValidVarName(tempVarName) && isDuplicateVarName(tempVarName) && (
-              <p className="text-xs text-red-600">
-                This variable name is already used by another node
-              </p>
-            )}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={saveVarName}
-                disabled={!isValidVarName(tempVarName) || isDuplicateVarName(tempVarName)}
-                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Check size={12} /> Save
-              </button>
-              <button
-                type="button"
-                onClick={cancelEditingVarName}
-                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200"
-              >
-                <X size={12} /> Cancel
-              </button>
-              {isCustomVarName && (
-                <button
-                  type="button"
-                  onClick={resetToDefault}
-                  className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded hover:bg-blue-200"
-                >
-                  Reset to default
-                </button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <code className="flex-1 px-3 py-2 bg-gray-100 rounded-md text-sm font-mono text-gray-800">
-              {effectiveVarName}
-            </code>
-            <button
-              type="button"
-              onClick={startEditingVarName}
-              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
-              title="Edit variable name"
-            >
-              <Edit2 size={14} />
-            </button>
-          </div>
-        )}
-        {!isEditingVarName && isCustomVarName && (
-          <p className="mt-1 text-xs text-blue-600">
-            Custom name (default: <code className="px-1 bg-gray-100 rounded">{derivedVarName}</code>
-            )
-          </p>
-        )}
+        <div className="flex items-center gap-2">
+          <code className="flex-1 px-3 py-2 bg-gray-100 rounded-md text-sm font-mono text-gray-600 cursor-not-allowed">
+            {effectiveVarName}
+          </code>
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Derived from Node Name. Used in formulas as <code>{effectiveVarName}</code>.
+        </p>
       </div>
 
       {/* Node Kind */}

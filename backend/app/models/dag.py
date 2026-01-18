@@ -132,10 +132,6 @@ class NodeConfig(BaseModel):
 
     id: str = Field(..., description="Unique identifier (internal, auto-generated)")
     name: str = Field(..., description="Display name (UI only)")
-    var_name: str | None = Field(
-        None,
-        description="Variable name for formulas and output columns (defaults to snake_case of name)",
-    )
     kind: NodeKind = Field(..., description="Node type: stochastic or deterministic")
     dtype: NodeDtype | None = Field(None, description="Data type (optional, inferrable)")
     scope: NodeScope = Field("row", description="Scope: global, group, or row")
@@ -152,27 +148,9 @@ class NodeConfig(BaseModel):
     # Post-processing
     post_processing: PostProcessing | None = Field(None, description="Post-processing config")
 
-    @field_validator("var_name")
-    @classmethod
-    def validate_var_name(cls, v: str | None) -> str | None:
-        """Validate var_name is a valid Python identifier if provided."""
-        if v is not None and not NODE_ID_PATTERN.match(v):
-            raise ValueError(
-                f"Variable name '{v}' must be a valid identifier (lowercase, underscores, "
-                "starting with letter or underscore)"
-            )
-        return v
-
     @property
     def effective_var_name(self) -> str:
-        """Get the effective variable name (explicit or derived from name).
-
-        Returns var_name if explicitly set, otherwise converts the node name
-        to snake_case (e.g., "Deterministic 4" -> "deterministic_4").
-        This matches the frontend behavior.
-        """
-        if self.var_name:
-            return self.var_name
+        """Get the effective variable name derived from name (cosmetic only)."""
         return self._to_snake_case(self.name)
 
     @staticmethod
@@ -298,18 +276,6 @@ class DAGDefinition(BaseModel):
             duplicates = [id for id in ids if ids.count(id) > 1]
             raise ValueError(f"Duplicate node IDs: {set(duplicates)}")
         return v
-
-    @model_validator(mode="after")
-    def validate_unique_var_names(self) -> "DAGDefinition":
-        """Ensure all effective var_names are unique."""
-        var_names = [node.effective_var_name for node in self.nodes]
-        if len(var_names) != len(set(var_names)):
-            duplicates = [vn for vn in var_names if var_names.count(vn) > 1]
-            raise ValueError(
-                f"Duplicate variable names: {set(duplicates)}. "
-                "Each node must have a unique var_name."
-            )
-        return self
 
 
 # =============================================================================
