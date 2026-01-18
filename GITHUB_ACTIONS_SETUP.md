@@ -28,6 +28,15 @@ postgresql+psycopg://[user]:[password]@aws-1-eu-west-1.pooler.supabase.com:5432/
 https://api.render.com/deploy/srv-xxxxxxxxxxxxx?key=xxxxxxxxxxxxxx
 ```
 
+**Secret 3: Backend URL (for Smoke Tests)**
+
+**Name:** `BACKEND_URL`
+
+**Value:** Your production backend base URL (from Render dashboard)
+```
+https://data-simulator-api.onrender.com
+```
+
 ### 2. Verify Workflow
 
 The workflow file is located at `.github/workflows/backend-ci.yml`.
@@ -38,6 +47,7 @@ It will automatically:
 - ✅ Apply migrations to your Supabase database
 - ✅ Trigger Render deployment via deploy hook
 - ✅ Render deploys only after migrations succeed
+- ✅ **New:** Smoke tests production API after deployment (polls `/healthz`, etc.)
 
 ### 3. Test the Setup
 
@@ -83,8 +93,23 @@ GitHub Actions triggered
          ↓
     Render deploys
          ↓
+   API Smoke Test
+         ↓
   Production ready
 ```
+
+## Pull Request Checks
+
+We now have automated safeguards on PRs:
+
+### 1. Backend PR Checks (`backend-pr.yml`)
+- Triggers on PRs affecting `backend/`.
+- Runs `pytest` to ensure logic is sound.
+- Runs `alembic check` to ensure your ORM models match your migrations (prevents schema drift).
+
+### 2. Frontend PR Checks (`frontend-pr.yml`)
+- Triggers on PRs affecting `frontend/`.
+- Runs `npm install` and `npm run build` to ensure the app compiles correctly.
 
 ## Important Notes
 

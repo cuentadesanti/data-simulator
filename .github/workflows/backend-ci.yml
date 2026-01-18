@@ -6,10 +6,6 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/backend-ci.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'backend/**'
 
 jobs:
   test-and-migrate:
@@ -52,3 +48,36 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+
+      - name: API Smoke Test
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "Starting smoke test for backend at $BACKEND_URL"
+          MAX_RETRIES=12
+          SLEEP_SECONDS=10
+          
+          ENDPOINTS=("/healthz" "/api/distributions" "/api/projects")
+          
+          for endpoint in "${ENDPOINTS[@]}"; do
+            echo "Checking $endpoint..."
+            SUCCESS=false
+            for ((i=1; i<=MAX_RETRIES; i++)); do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL$endpoint" || echo "000")
+              if [ "$STATUS" == "200" ]; then
+                echo "✅ $endpoint returned HTTP 200"
+                SUCCESS=true
+                break
+              else
+                echo "Attempt $i: $endpoint returned HTTP $STATUS. Retrying in ${SLEEP_SECONDS}s..."
+                sleep $SLEEP_SECONDS
+              fi
+            done
+            
+            if [ "$SUCCESS" = false ]; then
+              echo "❌ $endpoint failed smoke test after $MAX_RETRIES attempts"
+              exit 1
+            fi
+          done
+          echo "🚀 All smoke tests passed!"
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
