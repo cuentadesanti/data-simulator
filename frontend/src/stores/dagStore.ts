@@ -9,6 +9,7 @@ import type {
   EdgeValidation,
   MissingEdge,
 } from '../types/dag';
+import { toSnakeCase } from '../types/dag';
 
 type MainTabId = 'dag' | 'data';
 
@@ -87,6 +88,26 @@ interface DAGActions {
 
 const generateId = () => `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+const ensureUniqueVarName = (
+  baseVarName: string,
+  nodes: FlowNode[],
+  excludeNodeId?: string
+): string => {
+  let candidate = baseVarName;
+  let counter = 1;
+  const existingVarNames = new Set(
+    nodes
+      .filter((n) => n.id !== excludeNodeId)
+      .map((n) => n.data.config.var_name || toSnakeCase(n.data.config.name))
+  );
+
+  while (existingVarNames.has(candidate)) {
+    counter++;
+    candidate = `${baseVarName}_${counter}`;
+  }
+  return candidate;
+};
+
 const initialState: DAGState = {
   nodes: [],
   edges: [],
@@ -122,7 +143,7 @@ export const useDAGStore = create<DAGState & DAGActions>()(
           config: {
             id,
             name: config.name || `Node ${get().nodes.length + 1}`,
-            var_name: config.var_name, // Optional custom variable name
+            var_name: config.var_name, // Will be set below
             kind: config.kind || 'stochastic',
             dtype: config.dtype || 'float',
             scope: config.scope || 'row',
@@ -133,6 +154,12 @@ export const useDAGStore = create<DAGState & DAGActions>()(
           },
         },
       };
+
+      // Enforce unique var_name
+      const baseName = config.name || newNode.data.config.name;
+      const initialVarName = config.var_name || toSnakeCase(baseName);
+      newNode.data.config.var_name = ensureUniqueVarName(initialVarName, get().nodes);
+
       set((state) => {
         state.nodes.push(newNode);
         state.selectedNodeId = id;
@@ -147,7 +174,25 @@ export const useDAGStore = create<DAGState & DAGActions>()(
       set((state) => {
         const node = state.nodes.find((n) => n.id === nodeId);
         if (node) {
+          // Determine if we need to compute a new var_name
+          let computedVarName: string | undefined;
+
+          if (config.var_name) {
+            // Explicit var_name provided - ensure uniqueness
+            computedVarName = ensureUniqueVarName(config.var_name, state.nodes, nodeId);
+          } else if (config.name && config.name !== node.data.config.name) {
+            // Name changed without explicit var_name - auto-derive
+            computedVarName = ensureUniqueVarName(toSnakeCase(config.name), state.nodes, nodeId);
+          }
+
+          // Apply config updates
           node.data.config = { ...node.data.config, ...config };
+
+          // Override var_name with computed value if we calculated one
+          if (computedVarName !== undefined) {
+            node.data.config.var_name = computedVarName;
+          }
+
           // Invalidate validation when DAG changes
           state.lastValidationResult = null;
           state.edgeStatuses = [];

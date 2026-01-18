@@ -5,11 +5,13 @@ This module provides safe formula evaluation using simpleeval, supporting:
 - Variable access from row data and context
 - Lookup syntax for context tables: base[zona]
 - Parameter resolution for different value types (literal, formula, lookup, mapping)
+- Canonical node reference format: node("id") -> var_name
 """
 
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 from simpleeval import EvalWithCompoundTypes, NameNotDefined
@@ -113,6 +115,45 @@ ALLOWED_OPERATORS = {
     "<<",
     ">>",
 }
+
+
+# =============================================================================
+# Canonical Format Processing
+# =============================================================================
+
+# Regex to match node("id") canonical format
+CANONICAL_NODE_PATTERN = re.compile(r'node\("([^"]+)"\)')
+
+
+def expand_canonical_references(
+    formula: str,
+    id_to_var_name: dict[str, str] | None = None,
+) -> str:
+    """Expand canonical node("id") references to var_names.
+
+    The frontend stores formulas in canonical format using node IDs for stability.
+    This function converts them to var_names for evaluation.
+
+    Args:
+        formula: Formula potentially containing node("id") references
+        id_to_var_name: Mapping from node ID to var_name
+
+    Returns:
+        Formula with node("id") expanded to var_names
+
+    Example:
+        Input:  'node("node_123") * 2 + node("node_456")'
+        Output: 'base_salary * 2 + tax_rate'
+    """
+    if not formula or not id_to_var_name:
+        return formula
+
+    def replacer(match: re.Match) -> str:
+        node_id = match.group(1)
+        # Look up var_name, fall back to node_id if not found
+        return id_to_var_name.get(node_id, node_id)
+
+    return CANONICAL_NODE_PATTERN.sub(replacer, formula)
 
 
 # =============================================================================
@@ -234,6 +275,7 @@ def resolve_param_value(
     param_value: int | float | str | LookupValue | MappingValue,
     row_data: dict[str, Any],
     context: dict[str, Any],
+    id_to_var_name: dict[str, str] | None = None,
 ) -> float:
     """Resolve a parameter value to a float.
 
@@ -247,6 +289,7 @@ def resolve_param_value(
         param_value: Parameter value to resolve
         row_data: Current row data (generated node values)
         context: Global context (lookup tables, constants)
+        id_to_var_name: Optional mapping from node ID to var_name for canonical expansion
 
     Returns:
         Resolved float value
@@ -262,7 +305,7 @@ def resolve_param_value(
 
     # Case 2: Formula string
     if isinstance(param_value, str):
-        return parse_formula(param_value, row_data, context)
+        return parse_formula(param_value, row_data, context, id_to_var_name)
 
     # Case 3: LookupValue - lookup context[lookup][row[key]]
     # Handle both Pydantic model and dict-style
@@ -343,6 +386,7 @@ def parse_formula(
     formula: str,
     row_data: dict[str, Any],
     context: dict[str, Any],
+    id_to_var_name: dict[str, str] | None = None,
 ) -> float:
     """Parse and evaluate a formula expression.
 
@@ -350,11 +394,13 @@ def parse_formula(
     - Allowed functions (math, custom functions)
     - Variable access from row_data and context
     - Lookup syntax support: base[zona]
+    - Canonical node reference expansion: node("id") -> var_name
 
     Args:
-        formula: Formula expression to evaluate
-        row_data: Current row data (generated node values)
+        formula: Formula expression to evaluate (may contain canonical node("id") refs)
+        row_data: Current row data (generated node values, keyed by var_name)
         context: Global context (lookup tables, constants)
+        id_to_var_name: Optional mapping from node ID to var_name for canonical expansion
 
     Returns:
         Evaluated float value
@@ -365,6 +411,9 @@ def parse_formula(
         LookupKeyMissingError: If lookup key not found
     """
     try:
+        # Step 1: Expand canonical node("id") references to var_names
+        expanded_formula = expand_canonical_references(formula, id_to_var_name)
+
         # Create evaluator with compound types (supports indexing: base[zona])
         evaluator = EvalWithCompoundTypes()
 
@@ -375,7 +424,7 @@ def parse_formula(
         evaluator.names = NameResolver(row_data, context)
 
         # Evaluate the formula
-        result = evaluator.eval(formula)
+        result = evaluator.eval(expanded_formula)
 
         # Convert result to float
         return float(result)

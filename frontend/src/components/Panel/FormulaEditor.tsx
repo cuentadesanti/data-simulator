@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useDAGStore } from '../../stores/dagStore';
 import { getEffectiveVarName } from '../../types/dag';
+import { toCanonical, toDisplay } from '../../utils/formula';
 
 interface FormulaEditorProps {
   nodeId: string;
@@ -49,12 +50,14 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
   const edges = useDAGStore((state) => state.edges);
   const context = useDAGStore((state) => state.context);
 
-  // Read formula directly from store
-  const formula = useDAGStore((state) => {
+  // Read formula directly from store (Canonical Form)
+  const canonicalFormula = useDAGStore((state) => {
     const node = state.nodes.find((n) => n.id === nodeId);
     return node?.data.config.formula || '';
   });
 
+  // Local state for display
+  const [displayFormula, setDisplayFormula] = useState('');
   const [showHelp, setShowHelp] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -64,6 +67,41 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
   const [isValid, setIsValid] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const isEditingRef = useRef(false);
+
+  // Mappings for conversion
+  const idToVarName = useMemo(() => {
+    const map: Record<string, string> = {};
+    nodes.forEach((n) => {
+      map[n.id] = getEffectiveVarName(n.data.config);
+    });
+    return map;
+  }, [nodes]);
+
+  const varNameToId = useMemo(() => {
+    const map: Record<string, string> = {};
+    nodes.forEach((n) => {
+      const varName = getEffectiveVarName(n.data.config);
+      map[varName] = n.id;
+    });
+    return map;
+  }, [nodes]);
+
+  // Sync display formula when canonical formula changes externally (or on mount/node switch)
+  useEffect(() => {
+    // Skip sync while user is actively editing to prevent cursor jumping
+    if (isEditingRef.current) {
+      return;
+    }
+    // Update display from canonical (handles node switches and external changes)
+    setDisplayFormula(toDisplay(canonicalFormula, idToVarName));
+  }, [canonicalFormula, nodeId, idToVarName]);
+
+  // Also sync when nodeId changes (switching between nodes)
+  useEffect(() => {
+    isEditingRef.current = false;
+    setDisplayFormula(toDisplay(canonicalFormula, idToVarName));
+  }, [nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Get direct parents (nodes with edges pointing TO this node)
   const parentIds = useMemo(
@@ -131,7 +169,7 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
     []
   );
 
-  // Validate formula syntax
+  // Validate formula syntax (operates on DISPLAY formula)
   const validateFormula = useCallback(
     (formulaText: string): ValidationError[] => {
       const errors: ValidationError[] = [];
@@ -224,10 +262,10 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
 
   // Validate formula on change
   useEffect(() => {
-    const errors = validateFormula(formula);
+    const errors = validateFormula(displayFormula);
     setValidationErrors(errors);
-    setIsValid(errors.length === 0 && formula.trim().length > 0);
-  }, [formula, validateFormula]);
+    setIsValid(errors.length === 0 && displayFormula.trim().length > 0);
+  }, [displayFormula, validateFormula]);
 
   // Build all suggestions
   const allSuggestions = useMemo(
@@ -371,12 +409,16 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
       const textarea = textareaRef.current;
       if (!textarea) return;
 
-      const currentWord = getCurrentWord(formula, cursorPosition);
-      const beforeWord = formula.slice(0, cursorPosition - currentWord.length);
-      const afterCursor = formula.slice(cursorPosition);
+      const currentWord = getCurrentWord(displayFormula, cursorPosition);
+      const beforeWord = displayFormula.slice(0, cursorPosition - currentWord.length);
+      const afterCursor = displayFormula.slice(cursorPosition);
 
       const newFormula = beforeWord + suggestion.insertText + afterCursor;
-      updateNode(nodeId, { formula: newFormula });
+
+      // Update display AND canonical
+      setDisplayFormula(newFormula);
+      const newCanonical = toCanonical(newFormula, varNameToId);
+      updateNode(nodeId, { formula: newCanonical });
 
       // Move cursor to end of inserted text
       const newPosition = beforeWord.length + suggestion.insertText.length;
@@ -387,15 +429,34 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
 
       setShowSuggestions(false);
     },
-    [formula, cursorPosition, getCurrentWord, nodeId, updateNode]
+    [displayFormula, cursorPosition, getCurrentWord, nodeId, updateNode, varNameToId]
   );
 
   const handleFormulaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newFormula = e.target.value;
     const newPosition = e.target.selectionStart || 0;
+
+    // Mark as actively editing to prevent sync from overwriting
+    isEditingRef.current = true;
+
     setCursorPosition(newPosition);
-    updateNode(nodeId, { formula: newFormula });
+    setDisplayFormula(newFormula);
+
+    // Convert to canonical and update store
+    const newCanonical = toCanonical(newFormula, varNameToId);
+    updateNode(nodeId, { formula: newCanonical });
+
     updateSuggestions(newFormula, newPosition);
+  };
+
+  const handleFocus = () => {
+    isEditingRef.current = true;
+  };
+
+  const handleBlur = () => {
+    isEditingRef.current = false;
+    // Sync display from canonical on blur to ensure consistency
+    setDisplayFormula(toDisplay(canonicalFormula, idToVarName));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -427,7 +488,7 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
     const target = e.target as HTMLTextAreaElement;
     const pos = target.selectionStart || 0;
     setCursorPosition(pos);
-    updateSuggestions(formula, pos);
+    updateSuggestions(displayFormula, pos);
   };
 
   // Scroll selected suggestion into view
@@ -442,8 +503,12 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
 
   const insertText = (text: string) => {
     const textarea = textareaRef.current;
-    const newFormula = formula + text;
-    updateNode(nodeId, { formula: newFormula });
+    const newFormula = displayFormula + text;
+
+    setDisplayFormula(newFormula);
+    const newCanonical = toCanonical(newFormula, varNameToId);
+    updateNode(nodeId, { formula: newCanonical });
+
     setTimeout(() => {
       if (textarea) {
         textarea.focus();
@@ -484,7 +549,7 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
     return <span>{text}</span>;
   };
 
-  const currentWord = getCurrentWord(formula, cursorPosition);
+  const currentWord = getCurrentWord(displayFormula, cursorPosition);
 
   return (
     <div className="space-y-4">
@@ -494,11 +559,10 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
             Formula Editor
           </h3>
           {/* Live validation status */}
-          {formula.trim() && (
+          {displayFormula.trim() && (
             <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                isValid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-              }`}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${isValid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                }`}
             >
               {isValid ? (
                 <>
@@ -543,20 +607,21 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
         <textarea
           ref={textareaRef}
           id="formula"
-          value={formula}
+          value={displayFormula}
           onChange={handleFormulaChange}
           onKeyDown={handleKeyDown}
           onSelect={handleSelect}
           onClick={handleSelect}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           rows={4}
           placeholder="e.g., parent_node * 2 + sqrt(other_node)"
-          className={`w-full px-3 py-2 border rounded-md shadow-sm focus:ring-2 text-sm font-mono ${
-            validationErrors.length > 0
-              ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
-              : isValid
-                ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
-                : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-          }`}
+          className={`w-full px-3 py-2 border rounded-md shadow-sm focus:ring-2 text-sm font-mono ${validationErrors.length > 0
+            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+            : isValid
+              ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
+              : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+            }`}
         />
 
         {/* Validation Status Messages */}
@@ -565,13 +630,12 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
             {validationErrors.map((error, index) => (
               <div
                 key={index}
-                className={`flex items-start gap-2 text-xs px-2 py-1.5 rounded ${
-                  error.type === 'syntax'
-                    ? 'bg-red-50 text-red-700 border border-red-200'
-                    : error.type === 'reference'
-                      ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
-                      : 'bg-blue-50 text-blue-700 border border-blue-200'
-                }`}
+                className={`flex items-start gap-2 text-xs px-2 py-1.5 rounded ${error.type === 'syntax'
+                  ? 'bg-red-50 text-red-700 border border-red-200'
+                  : error.type === 'reference'
+                    ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                    : 'bg-blue-50 text-blue-700 border border-blue-200'
+                  }`}
               >
                 <span className="flex-shrink-0">
                   {error.type === 'syntax' ? '⚠️' : error.type === 'reference' ? '🔗' : 'ℹ️'}
@@ -602,19 +666,17 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
                 key={suggestion.id + suggestion.type}
                 type="button"
                 onClick={() => insertSuggestion(suggestion)}
-                className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-blue-50 ${
-                  index === selectedIndex ? 'bg-blue-100' : ''
-                }`}
+                className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-blue-50 ${index === selectedIndex ? 'bg-blue-100' : ''
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <span
-                    className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                      suggestion.type === 'node'
-                        ? 'bg-blue-100 text-blue-700'
-                        : suggestion.type === 'constant'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-purple-100 text-purple-700'
-                    }`}
+                    className={`text-xs px-1.5 py-0.5 rounded font-medium ${suggestion.type === 'node'
+                      ? 'bg-blue-100 text-blue-700'
+                      : suggestion.type === 'constant'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-purple-100 text-purple-700'
+                      }`}
                   >
                     {suggestion.type === 'node'
                       ? 'var'
