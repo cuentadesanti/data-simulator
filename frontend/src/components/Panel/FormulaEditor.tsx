@@ -224,7 +224,9 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
 
   // Validate formula on change
   useEffect(() => {
+    console.log('[FormulaEditor] Validating formula:', formula);
     const errors = validateFormula(formula);
+    console.log('[FormulaEditor] Validation result:', { errors, isValid: errors.length === 0 });
     setValidationErrors(errors);
     setIsValid(errors.length === 0 && formula.trim().length > 0);
   }, [formula, validateFormula]);
@@ -393,6 +395,7 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
   const handleFormulaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newFormula = e.target.value;
     const newPosition = e.target.selectionStart || 0;
+    console.log('[FormulaEditor] handleFormulaChange:', { newFormula, nodeId });
     setCursorPosition(newPosition);
     updateNode(nodeId, { formula: newFormula });
     updateSuggestions(newFormula, newPosition);
