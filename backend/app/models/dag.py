@@ -165,10 +165,15 @@ class NodeConfig(BaseModel):
 
     @property
     def effective_var_name(self) -> str:
-        """Get the effective variable name (explicit or derived from name)."""
+        """Get the effective variable name (explicit or node ID).
+        
+        Returns var_name if explicitly set, otherwise uses the node ID.
+        This makes formulas more intuitive since developers can reference
+        nodes by their IDs directly.
+        """
         if self.var_name:
             return self.var_name
-        return to_snake_case(self.name)
+        return self.id
 
     @model_validator(mode="after")
     def validate_mece(self) -> "NodeConfig":
