@@ -102,6 +102,7 @@ GOLDEN_HASHES = {
                     "dtype": "float",
                     "scope": "row",
                     "distribution": {"type": "normal", "params": {"mu": 0.0, "sigma": 1.0}},
+                    "post_processing": {"round_decimals": 6},
                 }
             ],
             "edges": [],
@@ -109,7 +110,7 @@ GOLDEN_HASHES = {
         },
         "seed": 42,
         "rows": 1000,
-        "csv_hash": "8767fde26a62be10acf7bd17482bf6fd34cb3ea4c779d8b3eaa35732b6aa4714",
+        "csv_hash": "79c131a0d4d6f2e3ba5c4575575e917ea05c272199aec60fd4511e2e77230ff9",
     },
     "simple_categorical": {
         "description": "Single categorical distribution node",
@@ -168,6 +169,7 @@ GOLDEN_HASHES = {
                             "sigma": 2000,
                         },
                     },
+                    "post_processing": {"round_decimals": 4},
                 },
                 {
                     "id": "salario_neto",
@@ -176,6 +178,7 @@ GOLDEN_HASHES = {
                     "dtype": "float",
                     "scope": "row",
                     "formula": "salario_base * (1 - TAX_RATE)",
+                    "post_processing": {"round_decimals": 4},
                 },
             ],
             "edges": [
@@ -189,7 +192,7 @@ GOLDEN_HASHES = {
         },
         "seed": 999,
         "rows": 2000,
-        "csv_hash": "2476f92f5664d5681ed732767746ab3d86492bce48b4c36bff27152b227d80d6",
+        "csv_hash": "7ce2ec7584ceffd633ce71c355895a17c97ee7b310972e430d27aa1aab1977b0",
     },
     "comprehensive_features": {
         "description": "Comprehensive DAG with all features: categorical root, lookup params, formulas, global scope, group scope, post-processing",

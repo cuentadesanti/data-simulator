@@ -30,7 +30,7 @@ def compute_csv_hash(df: pd.DataFrame) -> str:
     df_sorted.to_csv(
         csv_buffer,
         index=False,
-        line_terminator="\n",  # Unix line endings
+        lineterminator="\n",  # Unix line endings
         encoding="utf-8",
     )
     csv_bytes = csv_buffer.getvalue().encode("utf-8")
@@ -62,6 +62,7 @@ GOLDEN_HASHES = {
                     "dtype": "float",
                     "scope": "row",
                     "distribution": {"type": "normal", "params": {"mu": 0.0, "sigma": 1.0}},
+                    "post_processing": {"round_decimals": 6},
                 }
             ],
             "edges": [],
@@ -126,6 +127,7 @@ GOLDEN_HASHES = {
                             "sigma": 2000,
                         },
                     },
+                    "post_processing": {"round_decimals": 4},
                 },
                 {
                     "id": "salario_neto",
@@ -134,6 +136,7 @@ GOLDEN_HASHES = {
                     "dtype": "float",
                     "scope": "row",
                     "formula": "salario_base * (1 - TAX_RATE)",
+                    "post_processing": {"round_decimals": 4},
                 },
             ],
             "edges": [
