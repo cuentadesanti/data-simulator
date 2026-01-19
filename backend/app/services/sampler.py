@@ -568,7 +568,7 @@ def _resolve_params_for_row(
             # For complex types (LookupValue, MappingValue, lists), resolve
             try:
                 resolved[key] = resolve_param_value(value, row_data, context, id_to_var_name)
-            except:
+            except (TypeError, ValueError, KeyError):
                 # If resolve fails, pass through (e.g., for lists)
                 resolved[key] = value
     return resolved

@@ -598,10 +598,13 @@ def _validate_edge_semantics(
     used_edges: Set[tuple[str, str]] = set()
     missing_edges: List[dict[str, str]] = []
 
+    # Precompute combined set of all valid identifiers (node IDs and var_names)
+    all_identifiers = node_ids | var_names
+
     # Check each node's references (which can be IDs or var_names)
     for node in nodes:
         # Get references - can be node IDs or var_names
-        references = _get_node_references(node, node_ids | var_names)
+        references = _get_node_references(node, all_identifiers)
         direct_parent_idents = parent_identifiers.get(node.id, set())
 
         for ref_ident in references:
@@ -613,7 +616,7 @@ def _validate_edge_semantics(
             elif ref_ident in context_keys:
                 # Reference to context key - valid, no edge needed
                 pass
-            elif ref_ident in (node_ids | var_names):
+            elif ref_ident in all_identifiers:
                 # Reference to a node without an edge - error!
                 source_id = ref_ident if ref_ident in node_ids else var_name_to_id.get(ref_ident)
                 errors.append(

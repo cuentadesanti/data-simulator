@@ -88,20 +88,11 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
   }, [nodes]);
 
   // Sync display formula when canonical formula changes externally (or on mount/node switch)
-  useEffect(() => {
-    // Skip sync while user is actively editing to prevent cursor jumping
-    if (isEditingRef.current) {
-      return;
-    }
-    // Update display from canonical (handles node switches and external changes)
-    setDisplayFormula(toDisplay(canonicalFormula, idToVarName));
-  }, [canonicalFormula, nodeId, idToVarName]);
-
-  // Also sync when nodeId changes (switching between nodes)
+  // Reset editing state and update display from canonical
   useEffect(() => {
     isEditingRef.current = false;
     setDisplayFormula(toDisplay(canonicalFormula, idToVarName));
-  }, [nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canonicalFormula, nodeId, idToVarName]);
 
   // Get direct parents (nodes with edges pointing TO this node)
   const parentIds = useMemo(
