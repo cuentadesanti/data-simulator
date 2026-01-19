@@ -283,6 +283,38 @@ class DAGDefinition(BaseModel):
 # =============================================================================
 
 EdgeStatus = Literal["used", "unused", "invalid"]
+ErrorCode = Literal[
+    "CYCLE_DETECTED",
+    "MISSING_EDGE",
+    "INVALID_EDGE",
+    "UNKNOWN_VARIABLE",
+    "SYNTAX_ERROR",
+    "RESERVED_KEYWORD",
+    "INVALID_GROUP_BY",
+    "LIMIT_EXCEEDED",
+    "MISSING_DISTRIBUTION",
+    "MISSING_FORMULA",
+    "INVALID_DTYPE",
+    "DUPLICATE_NODE_ID",
+    "DUPLICATE_VAR_NAME",
+    "ISOLATED_NODE",
+    "GENERAL_ERROR",
+]
+ErrorSeverity = Literal["error", "warning"]
+
+
+class ValidationError(BaseModel):
+    """Structured validation error with actionable information."""
+
+    code: ErrorCode = Field(..., description="Machine-readable error code")
+    message: str = Field(..., description="Human-readable error message")
+    severity: ErrorSeverity = Field("error", description="Error severity level")
+    node_id: str | None = Field(None, description="ID of the affected node (if applicable)")
+    node_name: str | None = Field(None, description="Name of the affected node (if applicable)")
+    suggestion: str | None = Field(None, description="Actionable suggestion to fix the error")
+    context: dict[str, Any] | None = Field(
+        None, description="Additional context (e.g., expected vs actual values)"
+    )
 
 
 class EdgeValidation(BaseModel):
@@ -298,8 +330,11 @@ class ValidationResult(BaseModel):
     """Result of DAG validation."""
 
     valid: bool = Field(..., description="Whether the DAG is valid")
-    errors: list[str] = Field(default_factory=list, description="List of validation errors")
-    warnings: list[str] = Field(default_factory=list, description="List of warnings")
+    errors: list[str] = Field(default_factory=list, description="List of validation errors (legacy)")
+    warnings: list[str] = Field(default_factory=list, description="List of warnings (legacy)")
+    structured_errors: list[ValidationError] = Field(
+        default_factory=list, description="Structured validation errors with codes and suggestions"
+    )
     topological_order: list[str] | None = Field(
         None, description="Node IDs in topological order (if valid)"
     )

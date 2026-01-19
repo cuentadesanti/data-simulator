@@ -8,6 +8,7 @@ import type {
   GenerationMetadata,
   EdgeValidation,
   MissingEdge,
+  ValidationError,
 } from '../types/dag';
 
 type MainTabId = 'dag' | 'data';
@@ -30,6 +31,7 @@ interface DAGState {
   isValidating: boolean;
   isGenerating: boolean;
   validationErrors: string[];
+  structuredErrors: ValidationError[];
   activeMainTab: MainTabId;
 
   // Preview data
@@ -68,6 +70,7 @@ interface DAGActions {
   setValidating: (isValidating: boolean) => void;
   setGenerating: (isGenerating: boolean) => void;
   setValidationErrors: (errors: string[]) => void;
+  setStructuredErrors: (errors: ValidationError[]) => void;
   setPreviewData: (data: Record<string, unknown>[] | null, columns?: string[] | null) => void;
   setEdgeStatuses: (statuses: EdgeValidation[], missing: MissingEdge[]) => void;
   setLastValidationResult: (result: 'valid' | 'invalid' | 'pending' | null) => void;
@@ -100,6 +103,7 @@ const initialState: DAGState = {
   isValidating: false,
   isGenerating: false,
   validationErrors: [],
+  structuredErrors: [],
   activeMainTab: 'dag',
   previewData: null,
   previewColumns: null,
@@ -258,6 +262,12 @@ export const useDAGStore = create<DAGState & DAGActions>()(
       });
     },
 
+    setStructuredErrors: (errors) => {
+      set((state) => {
+        state.structuredErrors = errors;
+      });
+    },
+
     setPreviewData: (data, columns) => {
       set((state) => {
         state.previewData = data;
@@ -326,6 +336,7 @@ export const useDAGStore = create<DAGState & DAGActions>()(
         state.metadata = dag.metadata;
         state.selectedNodeId = null;
         state.validationErrors = [];
+        state.structuredErrors = [];
         state.previewData = null;
       });
     },
@@ -355,6 +366,7 @@ export const selectSelectedNodeId = (state: DAGState & DAGActions) => state.sele
 export const selectContext = (state: DAGState & DAGActions) => state.context;
 export const selectMetadata = (state: DAGState & DAGActions) => state.metadata;
 export const selectValidationErrors = (state: DAGState & DAGActions) => state.validationErrors;
+export const selectStructuredErrors = (state: DAGState & DAGActions) => state.structuredErrors;
 export const selectPreviewData = (state: DAGState & DAGActions) => state.previewData;
 export const selectPreviewColumns = (state: DAGState & DAGActions) => state.previewColumns;
 export const selectIsValidating = (state: DAGState & DAGActions) => state.isValidating;

@@ -1,56 +1,22 @@
 import { useState } from 'react';
-import { useDAGStore, selectValidationErrors } from '../../stores/dagStore';
-
-interface ValidationError {
-  code: string;
-  message: string;
-  nodeId?: string;
-  severity: 'error' | 'warning';
-}
-
-const parseValidationError = (error: string): ValidationError => {
-  // Try to parse structured error format like: [ERROR:NODE_ID] message
-  const errorMatch = error.match(/^\[(ERROR|WARNING):([^\]]+)\]\s*(.+)$/);
-  if (errorMatch) {
-    return {
-      code: errorMatch[2],
-      message: errorMatch[3],
-      nodeId: errorMatch[2],
-      severity: errorMatch[1].toLowerCase() as 'error' | 'warning',
-    };
-  }
-
-  // Try to parse node reference
-  const nodeMatch = error.match(/node[:\s]+['"]?([^'":\s]+)['"]?/i);
-  const nodeId = nodeMatch ? nodeMatch[1] : undefined;
-
-  // Determine severity
-  const severity = error.toLowerCase().includes('warning') ? 'warning' : 'error';
-
-  return {
-    code: 'VALIDATION_ERROR',
-    message: error,
-    nodeId,
-    severity,
-  };
-};
+import { useDAGStore, selectStructuredErrors } from '../../stores/dagStore';
+import type { ValidationError } from '../../types/dag';
 
 export const ValidationPanel = () => {
-  const validationErrors = useDAGStore(selectValidationErrors);
+  const structuredErrors = useDAGStore(selectStructuredErrors);
   const selectNode = useDAGStore((state) => state.selectNode);
   const [isExpanded, setIsExpanded] = useState(true);
 
-  if (!validationErrors || validationErrors.length === 0) {
+  if (!structuredErrors || structuredErrors.length === 0) {
     return null;
   }
 
-  const parsedErrors = validationErrors.map(parseValidationError);
-  const errors = parsedErrors.filter((e) => e.severity === 'error');
-  const warnings = parsedErrors.filter((e) => e.severity === 'warning');
+  const errors = structuredErrors.filter((e) => e.severity === 'error');
+  const warnings = structuredErrors.filter((e) => e.severity === 'warning');
 
   const handleErrorClick = (error: ValidationError) => {
-    if (error.nodeId) {
-      selectNode(error.nodeId);
+    if (error.node_id) {
+      selectNode(error.node_id);
     }
   };
 
@@ -61,14 +27,25 @@ export const ValidationPanel = () => {
         className="w-full px-4 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <svg
-            className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
+          {!isExpanded ? (
+            <svg
+              className="w-4 h-4 text-gray-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          ) : (
+            <svg
+              className="w-4 h-4 text-gray-500 transform rotate-90"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          )}
           <span className="font-medium text-gray-900">Validation Issues</span>
           <span className="text-xs text-gray-500">
             ({errors.length} {errors.length === 1 ? 'error' : 'errors'}
@@ -87,11 +64,10 @@ export const ValidationPanel = () => {
               {errors.map((error, index) => (
                 <div
                   key={`error-${index}`}
-                  className={`flex items-start gap-2 p-2 rounded text-sm ${
-                    error.nodeId
+                  className={`flex items-start gap-2 p-2 rounded text-sm ${error.node_id
                       ? 'bg-red-50 border border-red-200 cursor-pointer hover:bg-red-100 transition-colors'
                       : 'bg-red-50 border border-red-200'
-                  }`}
+                    }`}
                   onClick={() => handleErrorClick(error)}
                 >
                   <svg
@@ -106,11 +82,23 @@ export const ValidationPanel = () => {
                     />
                   </svg>
                   <div className="flex-1 min-w-0">
-                    <div className="font-mono text-xs text-red-700 mb-0.5">{error.code}</div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="font-mono text-xs font-bold text-red-700">{error.code}</span>
+                      {error.node_name && (
+                        <span className="text-xs text-red-600 border border-red-200 px-1 rounded bg-white">
+                          {error.node_name}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-red-900">{error.message}</div>
-                    {error.nodeId && (
-                      <div className="text-xs text-red-600 mt-1">
-                        Click to highlight node: {error.nodeId}
+                    {error.suggestion && (
+                      <div className="text-xs text-red-700 mt-1 italic">
+                        💡 {error.suggestion}
+                      </div>
+                    )}
+                    {error.node_id && (
+                      <div className="text-[10px] text-red-400 mt-1">
+                        Node ID: {error.node_id}
                       </div>
                     )}
                   </div>
@@ -124,11 +112,10 @@ export const ValidationPanel = () => {
               {warnings.map((warning, index) => (
                 <div
                   key={`warning-${index}`}
-                  className={`flex items-start gap-2 p-2 rounded text-sm ${
-                    warning.nodeId
+                  className={`flex items-start gap-2 p-2 rounded text-sm ${warning.node_id
                       ? 'bg-yellow-50 border border-yellow-200 cursor-pointer hover:bg-yellow-100 transition-colors'
                       : 'bg-yellow-50 border border-yellow-200'
-                  }`}
+                    }`}
                   onClick={() => handleErrorClick(warning)}
                 >
                   <svg
@@ -143,11 +130,20 @@ export const ValidationPanel = () => {
                     />
                   </svg>
                   <div className="flex-1 min-w-0">
-                    <div className="font-mono text-xs text-yellow-700 mb-0.5">{warning.code}</div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="font-mono text-xs font-bold text-yellow-700">
+                        {warning.code}
+                      </span>
+                      {warning.node_name && (
+                        <span className="text-xs text-yellow-600 border border-yellow-200 px-1 rounded bg-white">
+                          {warning.node_name}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-yellow-900">{warning.message}</div>
-                    {warning.nodeId && (
-                      <div className="text-xs text-yellow-600 mt-1">
-                        Click to highlight node: {warning.nodeId}
+                    {warning.suggestion && (
+                      <div className="text-xs text-yellow-700 mt-1 italic">
+                        💡 {warning.suggestion}
                       </div>
                     )}
                   </div>

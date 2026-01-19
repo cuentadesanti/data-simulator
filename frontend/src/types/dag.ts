@@ -125,3 +125,43 @@ export interface MissingEdge {
   source: string;
   target: string;
 }
+
+// Structured validation error types
+export type ErrorCode =
+  | 'CYCLE_DETECTED'
+  | 'MISSING_EDGE'
+  | 'INVALID_EDGE'
+  | 'UNKNOWN_VARIABLE'
+  | 'SYNTAX_ERROR'
+  | 'RESERVED_KEYWORD'
+  | 'INVALID_GROUP_BY'
+  | 'LIMIT_EXCEEDED'
+  | 'MISSING_DISTRIBUTION'
+  | 'MISSING_FORMULA'
+  | 'INVALID_DTYPE'
+  | 'DUPLICATE_NODE_ID'
+  | 'DUPLICATE_VAR_NAME'
+  | 'ISOLATED_NODE'
+  | 'GENERAL_ERROR';
+
+export type ErrorSeverity = 'error' | 'warning';
+
+export interface ValidationError {
+  code: ErrorCode;
+  message: string;
+  severity: ErrorSeverity;
+  node_id?: string;
+  node_name?: string;
+  suggestion?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  structured_errors: ValidationError[];
+  topological_order?: string[];
+  edge_statuses: EdgeValidation[];
+  missing_edges: MissingEdge[];
+}
