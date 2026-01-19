@@ -34,12 +34,20 @@ The heart of the application is the `Sampler Service`. It transforms a DAG (Dire
 - **Registry**: A central registry manages built-in distributions (Normal, Bernoulli, etc.).
 - **SciPy Integration**: Support for the full suite of `scipy.stats` distributions is provided via a wrapper.
 
+### 1.3. Dual-Mapping Variable System
+To ensure stability while maintaining user-friendliness, the backend implements a **dual-mapping** strategy for node variables:
+- **Internal Storage**: Generated data is stored in memory indexed by **both** the Node ID and the `effective_var_name`.
+- **Formulas**: Users can reference variables in formulas using either their snake_cased name (e.g., `base_salary`) OR their Node ID.
+- **Backend Logic**: Stochastic parameter lookups (e.g., keys in `LookupValue`) primarily use Node IDs for stability.
+- **Output**: The final DataFrame uses `effective_var_name` (snake_cased) for column names.
+
 ## 2. Frontend: Visual State Management
 
 ### Reactor Flow + Zustand
 - **Single Source of Truth**: The `dagStore` (Zustand) manages the graph structure, node configurations, and edges as a unified state.
 - **Immer Integration**: State mutations are handled via Immer to ensure immutability with clean syntax.
 - **Sync with Backend**: The store handles automatic validation rounds and preview generation fetches.
+
 
 ## 3. Data Flow
 

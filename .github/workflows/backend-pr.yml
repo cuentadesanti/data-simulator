@@ -35,5 +35,8 @@ jobs:
       - name: Run tests
         run: pytest -v
 
+      - name: Initialize database for drift check
+        run: alembic upgrade head
+
       - name: Alembic drift check
         run: alembic check

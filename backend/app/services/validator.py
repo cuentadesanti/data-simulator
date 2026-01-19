@@ -38,6 +38,8 @@ from app.utils.topological_sort import topological_sort
 # Regex to extract variable names from formulas
 # Matches valid Python identifiers that are not followed by '(' (to exclude function calls)
 _VARIABLE_PATTERN = re.compile(r"\b([a-z_][a-z0-9_]*)\b(?!\s*\()", re.IGNORECASE)
+# Canonical format: node("id")
+_CANONICAL_NODE_PATTERN = re.compile(r'node\("([^"]+)"\)')
 
 # Params that contain node references but shouldn't be parsed as formulas
 _PASSTHROUGH_PARAMS = {"categories", "probs"}
@@ -462,20 +464,28 @@ def _generate_warnings(dag: DAGDefinition, warnings: List[str]) -> None:
 def _extract_references_from_formula(formula: str) -> Set[str]:
     """Extract variable references from a formula string.
 
+    Handles both plain variable names (e.g., 'base_salary') and canonical
+    format (e.g., 'node("node_123")').
+
     Args:
         formula: Formula expression string
 
     Returns:
-        Set of variable names referenced in the formula
+        Set of variable names/IDs referenced in the formula
     """
     if not formula:
         return set()
 
-    # Find all potential variable names
+    references = set()
+
+    # Extract canonical node("id") references first
+    canonical_matches = _CANONICAL_NODE_PATTERN.findall(formula)
+    references.update(canonical_matches)
+
+    # Find all potential plain variable names
     matches = _VARIABLE_PATTERN.findall(formula)
 
     # Filter out reserved functions and keywords
-    references = set()
     for match in matches:
         if match.lower() not in RESERVED_FUNCTIONS and match not in {"True", "False", "None"}:
             references.add(match)
@@ -517,30 +527,31 @@ def _extract_references_from_params(params: Dict[str, Any], node_ids: Set[str]) 
     return references
 
 
-def _get_node_references(node: NodeConfig, node_ids: Set[str]) -> Set[str]:
+def _get_node_references(node: NodeConfig, allowed_identifiers: Set[str]) -> Set[str]:
     """Get all node references for a given node.
 
     Args:
         node: Node configuration
-        node_ids: Set of valid node IDs
+        allowed_identifiers: Set of valid node IDs or variable names to filter against
 
     Returns:
-        Set of node IDs that this node references
+        Set of node IDs/names that this node references
     """
     references: Set[str] = set()
 
     # Check formula (for deterministic nodes)
     if node.formula:
         formula_refs = _extract_references_from_formula(node.formula)
-        references.update(formula_refs & node_ids)
+        # Filter against valid identifiers (could be IDs or var_names)
+        references.update(formula_refs & allowed_identifiers)
 
     # Check distribution params (for stochastic nodes)
     if node.distribution and node.distribution.params:
-        param_refs = _extract_references_from_params(node.distribution.params, node_ids)
+        param_refs = _extract_references_from_params(node.distribution.params, allowed_identifiers)
         references.update(param_refs)
 
-    # Check group_by
-    if node.group_by and node.group_by in node_ids:
+    # Check group_by (must use node ID)
+    if node.group_by and node.group_by in allowed_identifiers:
         references.add(node.group_by)
 
     return references
@@ -576,36 +587,40 @@ def _validate_edge_semantics(
     var_name_to_id = {node.effective_var_name: node.id for node in nodes}
     var_names = set(var_name_to_id.keys())
 
-    # Build parent map: node_id -> set of direct parent var_names (from edges)
-    parent_var_names: Dict[str, Set[str]] = {node.id: set() for node in nodes}
+    # Build parent map: node_id -> set of direct parent identifiers (IDs and var_names)
+    parent_identifiers: Dict[str, Set[str]] = {node.id: set() for node in nodes}
     for edge in edges:
-        if edge.target in parent_var_names and edge.source in id_to_var_name:
-            parent_var_names[edge.target].add(id_to_var_name[edge.source])
+        if edge.target in parent_identifiers and edge.source in id_to_var_name:
+            parent_identifiers[edge.target].add(edge.source)
+            parent_identifiers[edge.target].add(id_to_var_name[edge.source])
 
     # Track which edges are used (by node_id pairs)
     used_edges: Set[tuple[str, str]] = set()
     missing_edges: List[dict[str, str]] = []
 
-    # Check each node's references (which are var_names)
-    for node in nodes:
-        # Get references as var_names
-        references = _get_node_references(node, var_names)
-        direct_parent_vars = parent_var_names.get(node.id, set())
+    # Precompute combined set of all valid identifiers (node IDs and var_names)
+    all_identifiers = node_ids | var_names
 
-        for ref_var_name in references:
-            if ref_var_name in direct_parent_vars:
-                # Edge exists and is used - translate var_name back to node_id
-                source_id = var_name_to_id.get(ref_var_name)
+    # Check each node's references (which can be IDs or var_names)
+    for node in nodes:
+        # Get references - can be node IDs or var_names
+        references = _get_node_references(node, all_identifiers)
+        direct_parent_idents = parent_identifiers.get(node.id, set())
+
+        for ref_ident in references:
+            if ref_ident in direct_parent_idents:
+                # Edge exists and is used - translate ident (ID or var_name) back to source source_id
+                source_id = ref_ident if ref_ident in node_ids else var_name_to_id.get(ref_ident)
                 if source_id:
                     used_edges.add((source_id, node.id))
-            elif ref_var_name in context_keys:
+            elif ref_ident in context_keys:
                 # Reference to context key - valid, no edge needed
                 pass
-            elif ref_var_name in var_names:
+            elif ref_ident in all_identifiers:
                 # Reference to a node without an edge - error!
-                source_id = var_name_to_id.get(ref_var_name)
+                source_id = ref_ident if ref_ident in node_ids else var_name_to_id.get(ref_ident)
                 errors.append(
-                    f"Node '{node.name}' references '{ref_var_name}' but there is no edge. "
+                    f"Node '{node.name}' references '{ref_ident}' but there is no edge. "
                     f"Add an edge to make this dependency explicit."
                 )
                 if source_id:

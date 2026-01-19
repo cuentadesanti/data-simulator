@@ -122,7 +122,6 @@ export const useDAGStore = create<DAGState & DAGActions>()(
           config: {
             id,
             name: config.name || `Node ${get().nodes.length + 1}`,
-            var_name: config.var_name, // Optional custom variable name
             kind: config.kind || 'stochastic',
             dtype: config.dtype || 'float',
             scope: config.scope || 'row',
@@ -133,6 +132,7 @@ export const useDAGStore = create<DAGState & DAGActions>()(
           },
         },
       };
+
       set((state) => {
         state.nodes.push(newNode);
         state.selectedNodeId = id;
@@ -147,7 +147,9 @@ export const useDAGStore = create<DAGState & DAGActions>()(
       set((state) => {
         const node = state.nodes.find((n) => n.id === nodeId);
         if (node) {
+          // Apply config updates
           node.data.config = { ...node.data.config, ...config };
+
           // Invalidate validation when DAG changes
           state.lastValidationResult = null;
           state.edgeStatuses = [];

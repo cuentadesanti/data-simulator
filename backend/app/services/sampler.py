@@ -319,7 +319,9 @@ def _sample_node(
             node, row_data_dict, context, rng, sample_size, id_to_var_name
         )
     else:  # deterministic
-        return _sample_deterministic_node(node, row_data_dict, context, sample_size)
+        return _sample_deterministic_node(
+            node, row_data_dict, context, sample_size, id_to_var_name
+        )
 
 
 def _sample_stochastic_node(
@@ -370,11 +372,13 @@ def _sample_stochastic_node(
         if has_dynamic_params:
             # Per-row sampling with dynamic params
             return _sample_per_row_dynamic(
-                node, distribution, row_data_dict, context, rng, sample_size
+                node, distribution, row_data_dict, context, rng, sample_size, id_to_var_name
             )
         else:
             # Vectorized sampling with static params
-            resolved_params = _resolve_params_static(node.distribution.params, context)
+            resolved_params = _resolve_params_static(
+                node.distribution.params, context, id_to_var_name
+            )
             size = sample_size
             return distribution.sample(resolved_params, size, rng)
 
@@ -384,7 +388,9 @@ def _sample_stochastic_node(
         first_row_data = {
             col: vals[0] if len(vals) > 0 else None for col, vals in row_data_dict.items()
         }
-        resolved_params = _resolve_params_for_row(node.distribution.params, first_row_data, context)
+        resolved_params = _resolve_params_for_row(
+            node.distribution.params, first_row_data, context, id_to_var_name
+        )
         single_value = distribution.sample(resolved_params, 1, rng)[0]
         return np.full(sample_size, single_value)
 
@@ -400,6 +406,7 @@ def _sample_deterministic_node(
     row_data_dict: dict[str, np.ndarray],
     context: dict[str, Any],
     sample_size: int,
+    id_to_var_name: dict[str, str] | None = None,
 ) -> np.ndarray:
     """Generate values for a deterministic node using formulas.
 
@@ -410,6 +417,7 @@ def _sample_deterministic_node(
         row_data_dict: Dictionary of column_name -> array of values
         context: Global context
         sample_size: Number of rows
+        id_to_var_name: Mapping from node ID to var_name for canonical expansion
 
     Returns:
         Array of computed values
@@ -430,9 +438,9 @@ def _sample_deterministic_node(
         # Build row data dict for this row
         row_data = {col: vals[i] for col, vals in row_data_dict.items()}
 
-        # Parse and evaluate formula
+        # Parse and evaluate formula (with canonical expansion support)
         try:
-            values[i] = parse_formula(node.formula, row_data, context)
+            values[i] = parse_formula(node.formula, row_data, context, id_to_var_name)
         except Exception as e:
             raise SampleError(
                 message=f"Formula evaluation failed for node '{node.id}' at row {i}: {str(e)}",
@@ -499,7 +507,11 @@ def _has_dynamic_params(params: dict[str, Any], row_data_dict: dict[str, np.ndar
 _PASSTHROUGH_PARAMS = {"categories", "probs"}
 
 
-def _resolve_params_static(params: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+def _resolve_params_static(
+    params: dict[str, Any],
+    context: dict[str, Any],
+    id_to_var_name: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Resolve parameters that don't depend on row data.
 
     Used for vectorized sampling when all params are static.
@@ -507,6 +519,7 @@ def _resolve_params_static(params: dict[str, Any], context: dict[str, Any]) -> d
     Args:
         params: Distribution parameters
         context: Global context
+        id_to_var_name: Mapping from node ID to var_name for canonical expansion
 
     Returns:
         Dictionary of resolved parameter values
@@ -520,7 +533,7 @@ def _resolve_params_static(params: dict[str, Any], context: dict[str, Any]) -> d
             resolved[key] = value
         elif isinstance(value, str):
             # Evaluate formula with empty row data
-            resolved[key] = resolve_param_value(value, {}, context)
+            resolved[key] = resolve_param_value(value, {}, context, id_to_var_name)
         else:
             # For lists, pass through
             resolved[key] = value
@@ -528,7 +541,10 @@ def _resolve_params_static(params: dict[str, Any], context: dict[str, Any]) -> d
 
 
 def _resolve_params_for_row(
-    params: dict[str, Any], row_data: dict[str, Any], context: dict[str, Any]
+    params: dict[str, Any],
+    row_data: dict[str, Any],
+    context: dict[str, Any],
+    id_to_var_name: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Resolve parameters for a specific row.
 
@@ -536,6 +552,7 @@ def _resolve_params_for_row(
         params: Distribution parameters
         row_data: Current row data
         context: Global context
+        id_to_var_name: Mapping from node ID to var_name for canonical expansion
 
     Returns:
         Dictionary of resolved parameter values
@@ -546,12 +563,12 @@ def _resolve_params_for_row(
         if key in _PASSTHROUGH_PARAMS:
             resolved[key] = value
         elif isinstance(value, (int, float, str)):
-            resolved[key] = resolve_param_value(value, row_data, context)
+            resolved[key] = resolve_param_value(value, row_data, context, id_to_var_name)
         else:
             # For complex types (LookupValue, MappingValue, lists), resolve
             try:
-                resolved[key] = resolve_param_value(value, row_data, context)
-            except:
+                resolved[key] = resolve_param_value(value, row_data, context, id_to_var_name)
+            except (TypeError, ValueError, KeyError):
                 # If resolve fails, pass through (e.g., for lists)
                 resolved[key] = value
     return resolved
@@ -564,6 +581,7 @@ def _sample_per_row_dynamic(
     context: dict[str, Any],
     rng: np.random.Generator,
     sample_size: int,
+    id_to_var_name: dict[str, str] | None = None,
 ) -> np.ndarray:
     """Sample with dynamic parameters that change per row.
 
@@ -576,6 +594,7 @@ def _sample_per_row_dynamic(
         context: Global context
         rng: Random number generator
         sample_size: Number of rows
+        id_to_var_name: Mapping from node ID to var_name for canonical expansion
 
     Returns:
         Array of sampled values
@@ -587,7 +606,9 @@ def _sample_per_row_dynamic(
         row_data = {col: vals[i] for col, vals in row_data_dict.items()}
 
         # Resolve params for this row
-        resolved_params = _resolve_params_for_row(node.distribution.params, row_data, context)
+        resolved_params = _resolve_params_for_row(
+            node.distribution.params, row_data, context, id_to_var_name
+        )
 
         # Sample 1 value
         values[i] = distribution.sample(resolved_params, 1, rng)[0]
@@ -666,7 +687,9 @@ def _sample_group_scope(
         row_data = {col: vals[first_idx] for col, vals in row_data_dict.items()}
 
         # Resolve params for this category
-        resolved_params = _resolve_params_for_row(node.distribution.params, row_data, context)
+        resolved_params = _resolve_params_for_row(
+            node.distribution.params, row_data, context, id_to_var_name
+        )
 
         # Sample 1 value for this category
         sampled_value = distribution.sample(resolved_params, 1, rng)[0]

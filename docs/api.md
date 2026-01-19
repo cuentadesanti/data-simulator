@@ -59,4 +59,6 @@ The API uses standard HTTP status codes combined with a structured JSON error re
 
 ---
 > [!IMPORTANT]
-> **Formula Variables**: When referencing other nodes in a formula, you MUST use the **Node ID** in its snake_cased form (e.g., Node "Salary Base" with ID `salario_base` is referenced as `salario_base`).
+> - `formula`: (Optional) Python expression for deterministic value generation.
+  - Can reference other nodes by **Node ID** OR **snake_cased name**.
+  - Example: `base_salary * (1 + inflation)` or `n0 * 2`.
