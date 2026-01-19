@@ -29,11 +29,39 @@ from app.models.dag import (
     DAGDefinition,
     DAGEdge,
     EdgeValidation,
+    ErrorCode,
     NodeConfig,
+    ValidationError,
     ValidationResult,
 )
 from app.services.formula_parser import parse_formula
 from app.utils.topological_sort import topological_sort
+
+
+def _add_error(
+    errors: List[str],
+    structured_errors: List[ValidationError],
+    code: ErrorCode,
+    message: str,
+    node_id: str | None = None,
+    node_name: str | None = None,
+    suggestion: str | None = None,
+    context: dict | None = None,
+    severity: str = "error",
+) -> None:
+    """Helper to add both legacy string error and structured error."""
+    errors.append(message)
+    structured_errors.append(
+        ValidationError(
+            code=code,
+            message=message,
+            severity=severity,
+            node_id=node_id,
+            node_name=node_name,
+            suggestion=suggestion,
+            context=context,
+        )
+    )
 
 # Regex to extract variable names from formulas
 # Matches valid Python identifiers that are not followed by '(' (to exclude function calls)
@@ -78,30 +106,39 @@ def validate_dag(dag: DAGDefinition) -> ValidationResult:
     """
     errors: List[str] = []
     warnings: List[str] = []
+    structured_errors: List[ValidationError] = []
     edge_statuses: List[EdgeValidation] = []
     missing_edges: List[dict[str, str]] = []
 
+    # Build node lookup for name resolution
+    node_lookup = {n.id: n for n in dag.nodes}
+
     # Step 1: Check limits
     try:
-        _validate_limits(dag, errors)
+        _validate_limits(dag, errors, structured_errors, node_lookup)
     except Exception as e:
         errors.append(str(e))
 
     # Step 2: Check reserved keywords
     try:
-        _validate_reserved_keywords(dag, errors)
+        _validate_reserved_keywords(dag, errors, structured_errors, node_lookup)
     except Exception as e:
         errors.append(str(e))
 
     # Step 2.5: Validate formula syntax
     try:
-        _validate_formula_syntax(dag, errors)
+        _validate_formula_syntax(dag, errors, structured_errors, node_lookup)
     except Exception as e:
         errors.append(str(e))
 
     # If we already have critical errors, return early
     if errors:
-        return ValidationResult(valid=False, errors=errors, warnings=warnings)
+        return ValidationResult(
+            valid=False,
+            errors=errors,
+            warnings=warnings,
+            structured_errors=structured_errors,
+        )
 
     # Step 3: Build node ID set for reference validation
     node_ids = {node.id for node in dag.nodes}
@@ -109,7 +146,7 @@ def validate_dag(dag: DAGDefinition) -> ValidationResult:
 
     # Step 4: Validate edges reference existing nodes
     try:
-        _validate_edges(dag.edges, node_ids, errors)
+        _validate_edges(dag.edges, node_ids, errors, structured_errors, node_lookup)
     except Exception as e:
         errors.append(str(e))
 
@@ -118,14 +155,23 @@ def validate_dag(dag: DAGDefinition) -> ValidationResult:
     try:
         topological_order = topological_sort(dag.nodes, dag.edges)
     except CycleDetectedError as e:
-        errors.append(e.message)
+        _add_error(
+            errors,
+            structured_errors,
+            code="CYCLE_DETECTED",
+            message=e.message,
+            suggestion="Remove one or more edges to break the cycle",
+            context={"cycle": e.details.get("cycle", []) if e.details else []},
+        )
     except Exception as e:
         errors.append(f"Error during topological sort: {str(e)}")
 
     # Step 6: Validate group_by references (must be ancestors in DAG)
     if topological_order:
         try:
-            _validate_group_by_references(dag.nodes, dag.edges, node_ids, errors)
+            _validate_group_by_references(
+                dag.nodes, dag.edges, node_ids, errors, structured_errors, node_lookup
+            )
         except Exception as e:
             errors.append(str(e))
 
@@ -133,13 +179,13 @@ def validate_dag(dag: DAGDefinition) -> ValidationResult:
     # and compute edge statuses
     try:
         edge_statuses, missing_edges = _validate_edge_semantics(
-            dag.nodes, dag.edges, node_ids, context_keys, errors
+            dag.nodes, dag.edges, node_ids, context_keys, errors, structured_errors, node_lookup
         )
     except Exception as e:
         errors.append(f"Error validating edge semantics: {str(e)}")
 
     # Step 8: Generate warnings for common issues
-    _generate_warnings(dag, warnings)
+    _generate_warnings(dag, warnings, structured_errors, node_lookup)
 
     # Determine if validation passed
     valid = len(errors) == 0
@@ -148,68 +194,129 @@ def validate_dag(dag: DAGDefinition) -> ValidationResult:
         valid=valid,
         errors=errors,
         warnings=warnings,
+        structured_errors=structured_errors,
         topological_order=topological_order if valid else None,
         edge_statuses=edge_statuses,
         missing_edges=missing_edges,
     )
 
 
-def _validate_limits(dag: DAGDefinition, errors: List[str]) -> None:
+def _validate_limits(
+    dag: DAGDefinition,
+    errors: List[str],
+    structured_errors: List[ValidationError],
+    node_lookup: Dict[str, NodeConfig],
+) -> None:
     """Validate DAG doesn't exceed configured limits.
 
     Args:
         dag: The DAG definition to validate
         errors: List to append error messages to
+        structured_errors: List to append structured errors to
+        node_lookup: Dictionary mapping node ID to NodeConfig
     """
     # Check node count
     node_count = len(dag.nodes)
     if node_count > settings.max_nodes:
-        error = LimitError("max_nodes", node_count, settings.max_nodes)
-        errors.append(error.message)
+        _add_error(
+            errors,
+            structured_errors,
+            code="LIMIT_EXCEEDED",
+            message=f"Exceeded max_nodes limit: {node_count} > {settings.max_nodes}",
+            suggestion=f"Reduce the number of nodes to {settings.max_nodes} or fewer",
+            context={"limit": "max_nodes", "actual": node_count, "maximum": settings.max_nodes},
+        )
 
     # Check edge count
     edge_count = len(dag.edges)
     if edge_count > settings.max_edges:
-        error = LimitError("max_edges", edge_count, settings.max_edges)
-        errors.append(error.message)
+        _add_error(
+            errors,
+            structured_errors,
+            code="LIMIT_EXCEEDED",
+            message=f"Exceeded max_edges limit: {edge_count} > {settings.max_edges}",
+            suggestion=f"Reduce the number of edges to {settings.max_edges} or fewer",
+            context={"limit": "max_edges", "actual": edge_count, "maximum": settings.max_edges},
+        )
 
     # Check sample size
     sample_size = dag.metadata.sample_size
     if sample_size > settings.max_rows_hard:
-        error = LimitError("max_rows_hard", sample_size, settings.max_rows_hard)
-        errors.append(error.message)
+        _add_error(
+            errors,
+            structured_errors,
+            code="LIMIT_EXCEEDED",
+            message=f"Exceeded max_rows limit: {sample_size} > {settings.max_rows_hard}",
+            suggestion=f"Reduce sample_size to {settings.max_rows_hard:,} or fewer",
+            context={"limit": "max_rows", "actual": sample_size, "maximum": settings.max_rows_hard},
+        )
 
     # Check formula lengths
     for node in dag.nodes:
         if node.formula and len(node.formula) > settings.max_formula_length:
-            error = InvalidNodeError(
-                node.id,
-                f"Formula length {len(node.formula)} exceeds maximum {settings.max_formula_length}",
+            _add_error(
+                errors,
+                structured_errors,
+                code="LIMIT_EXCEEDED",
+                message=f"Node '{node.name}': Formula length {len(node.formula)} exceeds maximum {settings.max_formula_length}",
+                node_id=node.id,
+                node_name=node.name,
+                suggestion="Simplify the formula or break it into multiple nodes",
+                context={
+                    "limit": "max_formula_length",
+                    "actual": len(node.formula),
+                    "maximum": settings.max_formula_length,
+                },
             )
-            errors.append(error.message)
 
 
-def _validate_reserved_keywords(dag: DAGDefinition, errors: List[str]) -> None:
+def _validate_reserved_keywords(
+    dag: DAGDefinition,
+    errors: List[str],
+    structured_errors: List[ValidationError],
+    node_lookup: Dict[str, NodeConfig],
+) -> None:
     """Validate node IDs and context keys don't use reserved keywords.
 
     Args:
         dag: The DAG definition to validate
         errors: List to append error messages to
+        structured_errors: List to append structured errors to
+        node_lookup: Dictionary mapping node ID to NodeConfig
     """
     # Check node IDs against reserved functions
     for node in dag.nodes:
         if node.id in RESERVED_FUNCTIONS:
-            error = ReservedKeywordError(node.id, "function name")
-            errors.append(error.message)
+            _add_error(
+                errors,
+                structured_errors,
+                code="RESERVED_KEYWORD",
+                message=f"'{node.id}' is a reserved function name and cannot be used as a node ID",
+                node_id=node.id,
+                node_name=node.name,
+                suggestion=f"Rename the node to avoid using reserved function names like '{node.id}'",
+                context={"reserved_type": "function", "keyword": node.id},
+            )
 
     # Check context keys against reserved context
     for key in dag.context.keys():
         if key in RESERVED_CONTEXT:
-            error = ReservedKeywordError(key, "context key")
-            errors.append(error.message)
+            _add_error(
+                errors,
+                structured_errors,
+                code="RESERVED_KEYWORD",
+                message=f"'{key}' is a reserved context key and cannot be used",
+                suggestion=f"Rename the context key to avoid using reserved names like '{key}'",
+                context={"reserved_type": "context", "keyword": key},
+            )
 
 
-def _validate_formula_syntax(dag: DAGDefinition, errors: List[str]) -> None:
+def _validate_formula_syntax(
+    dag: DAGDefinition,
+    errors: List[str],
+    structured_errors: List[ValidationError],
+    node_lookup: Dict[str, NodeConfig],
+) -> None:
     """Validate formula syntax for deterministic nodes.
 
     Uses the formula parser to pre-validate formulas with a test environment,
@@ -221,6 +328,8 @@ def _validate_formula_syntax(dag: DAGDefinition, errors: List[str]) -> None:
     Args:
         dag: The DAG definition to validate
         errors: List to append error messages to
+        structured_errors: List to append structured errors to
+        node_lookup: Dictionary mapping node ID to NodeConfig
     """
     # Build mappings for var_name resolution
     # node_id -> var_name
@@ -250,11 +359,15 @@ def _validate_formula_syntax(dag: DAGDefinition, errors: List[str]) -> None:
         # Deterministic nodes MUST have a formula
         if node.kind == "deterministic":
             if not node.formula or not node.formula.strip():
-                error = InvalidNodeError(
-                    node.id,
-                    "Deterministic node must have a formula",
+                _add_error(
+                    errors,
+                    structured_errors,
+                    code="MISSING_FORMULA",
+                    message=f"Node '{node.name}': Deterministic node must have a formula",
+                    node_id=node.id,
+                    node_name=node.name,
+                    suggestion="Add a formula expression like 'parent_var * 2' or change to stochastic type",
                 )
-                errors.append(error.message)
                 continue
 
         if node.formula:
@@ -267,24 +380,51 @@ def _validate_formula_syntax(dag: DAGDefinition, errors: List[str]) -> None:
                 # Try to parse the formula with test data
                 parse_formula(node.formula, test_row_data, test_context)
             except FormulaParseError as e:
-                error = InvalidNodeError(
-                    node.id,
-                    f"Syntax error in formula: {e.details.get('error', str(e))}",
+                error_detail = e.details.get("error", str(e)) if e.details else str(e)
+                _add_error(
+                    errors,
+                    structured_errors,
+                    code="SYNTAX_ERROR",
+                    message=f"Node '{node.name}': Syntax error in formula: {error_detail}",
+                    node_id=node.id,
+                    node_name=node.name,
+                    suggestion="Check for typos, mismatched parentheses, or invalid operators",
+                    context={"formula": node.formula, "error_detail": error_detail},
                 )
-                errors.append(error.message)
             except Exception as e:
-                # Catch any other unexpected parsing errors (including UnknownVariableError)
-                error = InvalidNodeError(
-                    node.id,
-                    f"Formula error: {str(e)}",
-                )
-                errors.append(error.message)
+                # Check if it's an unknown variable error
+                error_str = str(e)
+                available_vars = list(parent_vars) + list(test_context.keys())
+                if "not defined" in error_str.lower() or "unknown" in error_str.lower():
+                    _add_error(
+                        errors,
+                        structured_errors,
+                        code="UNKNOWN_VARIABLE",
+                        message=f"Node '{node.name}': {error_str}",
+                        node_id=node.id,
+                        node_name=node.name,
+                        suggestion=f"Available variables: {', '.join(sorted(available_vars)) if available_vars else 'none (add parent edges first)'}",
+                        context={"formula": node.formula, "available_vars": sorted(available_vars)},
+                    )
+                else:
+                    _add_error(
+                        errors,
+                        structured_errors,
+                        code="SYNTAX_ERROR",
+                        message=f"Node '{node.name}': Formula error: {error_str}",
+                        node_id=node.id,
+                        node_name=node.name,
+                        suggestion="Review the formula syntax and ensure all referenced variables exist",
+                        context={"formula": node.formula},
+                    )
 
 
 def _validate_edges(
     edges: List[DAGEdge],
     node_ids: Set[str],
     errors: List[str],
+    structured_errors: List[ValidationError],
+    node_lookup: Dict[str, NodeConfig],
 ) -> None:
     """Validate all edges reference existing nodes.
 
@@ -292,21 +432,35 @@ def _validate_edges(
         edges: List of edges to validate
         node_ids: Set of valid node IDs
         errors: List to append error messages to
+        structured_errors: List to append structured errors to
+        node_lookup: Dictionary mapping node ID to NodeConfig
     """
     for edge in edges:
         if edge.source not in node_ids:
-            error = InvalidNodeError(
-                edge.target,
-                f"Edge source '{edge.source}' does not exist",
+            target_node = node_lookup.get(edge.target)
+            _add_error(
+                errors,
+                structured_errors,
+                code="INVALID_EDGE",
+                message=f"Edge source '{edge.source}' does not exist",
+                node_id=edge.target,
+                node_name=target_node.name if target_node else None,
+                suggestion="Remove this edge or create the missing source node",
+                context={"edge_source": edge.source, "edge_target": edge.target},
             )
-            errors.append(error.message)
 
         if edge.target not in node_ids:
-            error = InvalidNodeError(
-                edge.source,
-                f"Edge target '{edge.target}' does not exist",
+            source_node = node_lookup.get(edge.source)
+            _add_error(
+                errors,
+                structured_errors,
+                code="INVALID_EDGE",
+                message=f"Edge target '{edge.target}' does not exist",
+                node_id=edge.source,
+                node_name=source_node.name if source_node else None,
+                suggestion="Remove this edge or create the missing target node",
+                context={"edge_source": edge.source, "edge_target": edge.target},
             )
-            errors.append(error.message)
 
 
 def _validate_group_by_references(
@@ -314,6 +468,8 @@ def _validate_group_by_references(
     edges: List[DAGEdge],
     node_ids: Set[str],
     errors: List[str],
+    structured_errors: List[ValidationError],
+    node_lookup: Dict[str, NodeConfig],
 ) -> None:
     """Validate group_by references point to existing ancestor nodes.
 
@@ -329,28 +485,45 @@ def _validate_group_by_references(
         edges: List of edges (for building ancestor relationships)
         node_ids: Set of valid node IDs
         errors: List to append error messages to
+        structured_errors: List to append structured errors to
+        node_lookup: Dictionary mapping node ID to NodeConfig
     """
     # Build ancestor map (which nodes can reach which other nodes)
     ancestors = _build_ancestor_map(nodes, edges)
 
-    # Build a node lookup for checking dtype/scope
-    node_lookup = {n.id: n for n in nodes}
+    # Find all categorical nodes for suggestions
+    categorical_nodes = [n for n in nodes if n.dtype == "category"]
+    categorical_names = [n.name for n in categorical_nodes]
 
     for node in nodes:
         if node.group_by:
             # Check group_by references an existing node
             if node.group_by not in node_ids:
-                error = MissingParentError(node.id, node.group_by)
-                errors.append(error.message)
+                _add_error(
+                    errors,
+                    structured_errors,
+                    code="INVALID_GROUP_BY",
+                    message=f"Node '{node.name}': group_by references non-existent node '{node.group_by}'",
+                    node_id=node.id,
+                    node_name=node.name,
+                    suggestion=f"Use one of the existing categorical nodes: {', '.join(categorical_names)}" if categorical_names else "Create a categorical node first",
+                    context={"group_by": node.group_by, "available_categorical": categorical_names},
+                )
                 continue
 
             # Check group_by is an ancestor (or the node itself for edge cases)
             if node.id != node.group_by and node.group_by not in ancestors.get(node.id, set()):
-                error = InvalidNodeError(
-                    node.id,
-                    f"group_by '{node.group_by}' must be an ancestor node in the DAG",
+                ref_node = node_lookup.get(node.group_by)
+                _add_error(
+                    errors,
+                    structured_errors,
+                    code="INVALID_GROUP_BY",
+                    message=f"Node '{node.name}': group_by '{ref_node.name if ref_node else node.group_by}' must be an ancestor node",
+                    node_id=node.id,
+                    node_name=node.name,
+                    suggestion=f"Add an edge from '{ref_node.name if ref_node else node.group_by}' to '{node.name}' to establish the dependency",
+                    context={"group_by": node.group_by},
                 )
-                errors.append(error.message)
                 continue
 
             # Get the referenced node for scope/dtype validation
@@ -358,21 +531,29 @@ def _validate_group_by_references(
             if ref_node:
                 # Check group_by references a categorical node
                 if ref_node.dtype != "category":
-                    error = InvalidNodeError(
-                        node.id,
-                        f"group_by '{node.group_by}' must be a categorical node "
-                        f"(dtype='category'), but it has dtype='{ref_node.dtype}'",
+                    _add_error(
+                        errors,
+                        structured_errors,
+                        code="INVALID_GROUP_BY",
+                        message=f"Node '{node.name}': group_by node '{ref_node.name}' must be categorical (dtype='category'), but has dtype='{ref_node.dtype}'",
+                        node_id=node.id,
+                        node_name=node.name,
+                        suggestion=f"Change '{ref_node.name}' dtype to 'category', or use a different categorical node: {', '.join(categorical_names)}" if categorical_names else f"Change '{ref_node.name}' dtype to 'category'",
+                        context={"group_by": node.group_by, "expected_dtype": "category", "actual_dtype": ref_node.dtype},
                     )
-                    errors.append(error.message)
 
                 # Check group_by references a row-scoped node (v1 restriction)
                 if ref_node.scope != "row":
-                    error = InvalidNodeError(
-                        node.id,
-                        f"group_by '{node.group_by}' must be row-scoped, "
-                        f"but it has scope='{ref_node.scope}'",
+                    _add_error(
+                        errors,
+                        structured_errors,
+                        code="INVALID_GROUP_BY",
+                        message=f"Node '{node.name}': group_by node '{ref_node.name}' must be row-scoped, but has scope='{ref_node.scope}'",
+                        node_id=node.id,
+                        node_name=node.name,
+                        suggestion=f"Change '{ref_node.name}' scope to 'row', or use a different row-scoped categorical node",
+                        context={"group_by": node.group_by, "expected_scope": "row", "actual_scope": ref_node.scope},
                     )
-                    errors.append(error.message)
 
 
 def _build_ancestor_map(
@@ -423,12 +604,19 @@ def _build_ancestor_map(
     return ancestors
 
 
-def _generate_warnings(dag: DAGDefinition, warnings: List[str]) -> None:
+def _generate_warnings(
+    dag: DAGDefinition,
+    warnings: List[str],
+    structured_errors: List[ValidationError],
+    node_lookup: Dict[str, NodeConfig],
+) -> None:
     """Generate warnings for common issues that aren't errors.
 
     Args:
         dag: The DAG definition to check
         warnings: List to append warning messages to
+        structured_errors: List to append structured warnings to
+        node_lookup: Dictionary mapping node ID to NodeConfig
     """
     # Warn about isolated nodes (no edges)
     if dag.edges:
@@ -437,28 +625,63 @@ def _generate_warnings(dag: DAGDefinition, warnings: List[str]) -> None:
             node_ids_in_edges.add(edge.source)
             node_ids_in_edges.add(edge.target)
 
-        isolated_nodes = [node.id for node in dag.nodes if node.id not in node_ids_in_edges]
+        isolated_nodes = [node for node in dag.nodes if node.id not in node_ids_in_edges]
         if isolated_nodes:
-            warnings.append(
-                f"Isolated nodes (not connected to any edges): {', '.join(isolated_nodes)}"
-            )
+            isolated_names = [n.name for n in isolated_nodes]
+            msg = f"Isolated nodes (not connected to any edges): {', '.join(isolated_names)}"
+            warnings.append(msg)
+            for node in isolated_nodes:
+                structured_errors.append(
+                    ValidationError(
+                        code="ISOLATED_NODE",
+                        message=f"Node '{node.name}' is not connected to any edges",
+                        severity="warning",
+                        node_id=node.id,
+                        node_name=node.name,
+                        suggestion="Connect this node to other nodes or remove it if unused",
+                    )
+                )
 
     # Warn about high sample sizes
     if dag.metadata.sample_size > 1_000_000:
-        warnings.append(
-            f"Large sample size ({dag.metadata.sample_size:,} rows) may take "
-            "significant time to generate"
+        msg = f"Large sample size ({dag.metadata.sample_size:,} rows) may take significant time to generate"
+        warnings.append(msg)
+        structured_errors.append(
+            ValidationError(
+                code="GENERAL_ERROR",
+                message=msg,
+                severity="warning",
+                suggestion="Consider using a smaller sample size for testing, then increase for final generation",
+                context={"sample_size": dag.metadata.sample_size},
+            )
         )
 
     # Warn about complex DAGs
     if len(dag.nodes) > 100:
-        warnings.append(
-            f"Large DAG with {len(dag.nodes)} nodes may have slower validation and generation times"
+        msg = f"Large DAG with {len(dag.nodes)} nodes may have slower validation and generation times"
+        warnings.append(msg)
+        structured_errors.append(
+            ValidationError(
+                code="GENERAL_ERROR",
+                message=msg,
+                severity="warning",
+                suggestion="Consider breaking the DAG into smaller, more manageable pieces",
+                context={"node_count": len(dag.nodes)},
+            )
         )
 
     # Warn if no seed specified for reproducibility
     if dag.metadata.seed is None:
-        warnings.append("No random seed specified - results will not be reproducible")
+        msg = "No random seed specified - results will not be reproducible"
+        warnings.append(msg)
+        structured_errors.append(
+            ValidationError(
+                code="GENERAL_ERROR",
+                message=msg,
+                severity="warning",
+                suggestion="Set a seed value in the metadata for reproducible results",
+            )
+        )
 
 
 def _extract_references_from_formula(formula: str) -> Set[str]:
@@ -563,6 +786,8 @@ def _validate_edge_semantics(
     node_ids: Set[str],
     context_keys: Set[str],
     errors: List[str],
+    structured_errors: List[ValidationError],
+    node_lookup: Dict[str, NodeConfig],
 ) -> tuple[List[EdgeValidation], List[dict[str, str]]]:
     """Validate that node references have corresponding edges.
 
@@ -578,6 +803,8 @@ def _validate_edge_semantics(
         node_ids: Set of valid node IDs
         context_keys: Set of valid context keys
         errors: List to append error messages to
+        structured_errors: List to append structured errors to
+        node_lookup: Dictionary mapping node ID to NodeConfig
 
     Returns:
         Tuple of (edge_statuses, missing_edges)
@@ -619,9 +846,17 @@ def _validate_edge_semantics(
             elif ref_ident in all_identifiers:
                 # Reference to a node without an edge - error!
                 source_id = ref_ident if ref_ident in node_ids else var_name_to_id.get(ref_ident)
-                errors.append(
-                    f"Node '{node.name}' references '{ref_ident}' but there is no edge. "
-                    f"Add an edge to make this dependency explicit."
+                source_node = node_lookup.get(source_id) if source_id else None
+                source_name = source_node.name if source_node else ref_ident
+                _add_error(
+                    errors,
+                    structured_errors,
+                    code="MISSING_EDGE",
+                    message=f"Node '{node.name}' references '{ref_ident}' but there is no edge",
+                    node_id=node.id,
+                    node_name=node.name,
+                    suggestion=f"Add an edge from '{source_name}' to '{node.name}'",
+                    context={"referenced": ref_ident, "source_id": source_id},
                 )
                 if source_id:
                     missing_edges.append({"source": source_id, "target": node.id})
@@ -640,7 +875,7 @@ def _validate_edge_semantics(
             )
         else:
             source_var = id_to_var_name.get(edge.source, edge.source)
-            target_node = next((n for n in nodes if n.id == edge.target), None)
+            target_node = node_lookup.get(edge.target)
             target_name = target_node.name if target_node else edge.target
             edge_statuses.append(
                 EdgeValidation(

@@ -932,7 +932,7 @@ class TestFormulaSyntaxValidation:
         result = validate_dag(dag)
         assert result.valid is False
         assert any("syntax" in error.lower() for error in result.errors)
-        assert any("b" in error for error in result.errors)  # Should mention node 'b'
+        assert any("B" in error for error in result.errors)  # Should mention node name 'B'
 
     def test_invalid_function_in_formula_fails(self):
         """Test that invalid function in formula fails validation."""
