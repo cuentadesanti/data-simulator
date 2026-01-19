@@ -432,7 +432,10 @@ def _sample_deterministic_node(
         )
 
     # Evaluate formula for each row
-    values = np.zeros(sample_size)
+    if node.dtype in ("string", "category"):
+        values = np.empty(sample_size, dtype=object)
+    else:
+        values = np.zeros(sample_size)
 
     for i in range(sample_size):
         # Build row data dict for this row

@@ -426,8 +426,8 @@ def parse_formula(
         # Evaluate the formula
         result = evaluator.eval(expanded_formula)
 
-        # Convert result to float
-        return float(result)
+        # Return result as-is (allow strings, bools, etc.)
+        return result
 
     except NameNotDefined as e:
         # Variable not found in row_data or context

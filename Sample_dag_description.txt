@@ -1,0 +1,101 @@
+MODEL: Simple income-generating DAG with parametric assumptions
+
+All random variables are conditionally independent given their parents
+
+--------------------------------
+EXOGENOUS
+--------------------------------
+
+Region ∈ {North, South, Center}
+P(Region) = Categorical([0.3, 0.4, 0.3])
+
+Age ~ Normal(mean=40, sd=10), truncated to [18, 65]
+
+--------------------------------
+EDUCATION
+--------------------------------
+
+Education_years | Region ~ Normal(mean=μ_E, sd=2)
+
+μ_E:
+- North: 14
+- Center: 13
+- South: 11
+
+--------------------------------
+SKILL (latent)
+--------------------------------
+
+Skill | Education_years, Region ~ Normal(mean=μ_S, sd=1)
+
+μ_S = 0.5 * Education_years
+      + Region_effect
+
+Region_effect:
+- North: +0.5
+- Center: 0.0
+- South: -0.5
+
+--------------------------------
+OCCUPATION
+--------------------------------
+
+Occupation ∈ {LowSkill, MidSkill, HighSkill}
+
+P(Occupation | Skill) via softmax logits:
+
+Logits:
+- LowSkill  = -1.5 - 1.0 * Skill
+- MidSkill  =  0.0 + 0.5 * Skill
+- HighSkill = -0.5 + 1.2 * Skill
+
+--------------------------------
+FAMILY INCOME
+--------------------------------
+
+Family_income | Education_years, Region ~ LogNormal(meanlog=μ_F, sdlog=0.6)
+
+μ_F = 9.5
+      + 0.08 * Education_years
+      + Region_income_shift
+
+Region_income_shift:
+- North: +0.3
+- Center: 0.0
+- South: -0.4
+
+(Income units are annual, in log-scale currency units)
+
+--------------------------------
+INDIVIDUAL INCOME
+--------------------------------
+
+Individual_income | Skill, Occupation, Family_income, Age
+~ LogNormal(meanlog=μ_I, sdlog=0.7)
+
+μ_I = 8.8
+      + 0.35 * Skill
+      + Occupation_effect
+      + 0.25 * log(Family_income)
+      + 0.015 * (Age - 40)
+
+Occupation_effect:
+- LowSkill:  -0.6
+- MidSkill:   0.0
+- HighSkill: +0.7
+
+--------------------------------
+OPTIONAL TOP-TAIL EXTENSION
+--------------------------------
+
+If Individual_income > 150,000:
+  Income_excess ~ Pareto(alpha=2.5, xmin=150,000)
+
+--------------------------------
+INTERPRETATION
+--------------------------------
+
+- Multiplicative income process via lognormal
+- Intergenerational persistence through Family_income
+- Region affects income only through education, skill, and background
+- Skill is the main continuous driver of occupation and earnings
