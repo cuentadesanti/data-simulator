@@ -9,7 +9,6 @@ import type {
   EdgeValidation,
   MissingEdge,
 } from '../types/dag';
-import { toSnakeCase } from '../types/dag';
 
 type MainTabId = 'dag' | 'data';
 
