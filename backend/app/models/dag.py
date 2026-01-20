@@ -250,6 +250,27 @@ class GenerationMetadata(BaseModel):
 
 
 # =============================================================================
+# Layout Configuration
+# =============================================================================
+
+
+class NodePosition(BaseModel):
+    """Position of a node in the visual editor."""
+
+    x: float = Field(..., description="X coordinate")
+    y: float = Field(..., description="Y coordinate")
+
+
+class Layout(BaseModel):
+    """Visual layout information for the DAG editor."""
+
+    positions: dict[str, NodePosition] = Field(
+        default_factory=dict,
+        description="Node positions keyed by node ID"
+    )
+
+
+# =============================================================================
 # DAG Definition (Top-level)
 # =============================================================================
 
@@ -266,6 +287,7 @@ class DAGDefinition(BaseModel):
     )
     constraints: list[Constraint] = Field(default_factory=list, description="Row constraints")
     metadata: GenerationMetadata = Field(..., description="Generation metadata")
+    layout: Layout | None = Field(None, description="Visual layout for the editor")
 
     @field_validator("nodes")
     @classmethod

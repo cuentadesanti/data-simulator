@@ -305,6 +305,11 @@ export const useDAGStore = create<DAGState & DAGActions>()(
         })),
         context: state.context,
         metadata: state.metadata,
+        layout: {
+          positions: Object.fromEntries(
+            state.nodes.map((n) => [n.id, n.position])
+          ),
+        },
       };
     },
 
