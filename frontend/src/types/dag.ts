@@ -79,8 +79,15 @@ export interface NodePosition {
   y: number;
 }
 
+export interface Viewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
 export interface Layout {
   positions: Record<string, NodePosition>;
+  viewport?: Viewport;
 }
 
 // Generation metadata

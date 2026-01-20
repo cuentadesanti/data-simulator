@@ -9,6 +9,7 @@ import {
   useEdgesState,
   BackgroundVariant,
   ConnectionLineType,
+  useReactFlow,
 } from '@xyflow/react';
 import type {
   Connection,
@@ -26,7 +27,10 @@ import {
   selectEdges,
   selectSelectedNodeId,
   selectEdgeStatuses,
+  selectViewport,
+  selectShouldRestoreViewport,
 } from '../../stores/dagStore';
+import { useProjectStore, selectCurrentProjectId } from '../../stores/projectStore';
 import CustomNode from './CustomNode';
 import type { FlowNodeData } from '../../types/dag';
 import { useToast } from '../common';
@@ -70,6 +74,14 @@ const DAGCanvas = () => {
   const deleteEdgeAction = useDAGStore((state) => state.deleteEdge);
   const deleteNode = useDAGStore((state) => state.deleteNode);
   const addNodeAction = useDAGStore((state) => state.addNode);
+
+  const viewport = useDAGStore(selectViewport);
+  const shouldRestoreViewport = useDAGStore(selectShouldRestoreViewport);
+  const setStoreViewport = useDAGStore((state) => state.setViewport);
+  const setViewportRestored = useDAGStore((state) => state.setViewportRestored);
+
+  const currentProjectId = useProjectStore(selectCurrentProjectId);
+  const { setViewport: setFlowViewport } = useReactFlow();
   const { addToast } = useToast();
 
   // Convert store nodes to React Flow nodes with selection state
@@ -143,6 +155,18 @@ const DAGCanvas = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(flowNodes as Node[]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flowEdges as Edge[]);
 
+  // Restore viewport
+  useEffect(() => {
+    if (shouldRestoreViewport && viewport) {
+      // Small timeout to ensure Flow is ready, and to override fitView
+      const timer = setTimeout(() => {
+        setFlowViewport(viewport);
+        setViewportRestored();
+      }, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldRestoreViewport, viewport, setFlowViewport, setViewportRestored]);
+
   // Sync store changes to local state
   useEffect(() => {
     setNodes(flowNodes as Node[]);
@@ -209,6 +233,14 @@ const DAGCanvas = () => {
     [onNodesChange, updateNodePosition]
   );
 
+  // Handle viewport changes
+  const onMoveEnd = useCallback(
+    (_event: unknown, viewport: { x: number; y: number; zoom: number }) => {
+      setStoreViewport(viewport);
+    },
+    [setStoreViewport]
+  );
+
   // Handle edge changes (including deletions)
   const handleEdgesChange = useCallback(
     (changes: EdgeChange<Edge>[]) => {
@@ -257,8 +289,10 @@ const DAGCanvas = () => {
         onConnect={onConnect}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        onMoveEnd={onMoveEnd}
+        key={currentProjectId || 'empty'}
         nodeTypes={nodeTypes}
-        fitView
+        fitView // Default behavior for new/legacy, overridden by restore
         attributionPosition="bottom-right"
         minZoom={0.1}
         maxZoom={2}

@@ -9,6 +9,7 @@ import type {
   EdgeValidation,
   MissingEdge,
   ValidationError,
+  Viewport,
 } from '../types/dag';
 
 type MainTabId = 'dag' | 'data';
@@ -17,6 +18,7 @@ interface DAGState {
   // Flow state
   nodes: FlowNode[];
   edges: FlowEdge[];
+  viewport: Viewport | null;
 
   // Selection
   selectedNodeId: string | null;
@@ -44,6 +46,9 @@ interface DAGState {
 
   // Validation state
   lastValidationResult: 'valid' | 'invalid' | 'pending' | null;
+
+  // Viewport restoration flag
+  shouldRestoreViewport: boolean;
 }
 
 interface DAGActions {
@@ -57,6 +62,9 @@ interface DAGActions {
   // Edge operations
   addEdge: (source: string, target: string) => void;
   deleteEdge: (edgeId: string) => void;
+
+  // Viewport operations
+  setViewport: (viewport: Viewport) => void;
 
   // Context operations
   setContext: (context: Record<string, unknown>) => void;
@@ -75,11 +83,14 @@ interface DAGActions {
   setEdgeStatuses: (statuses: EdgeValidation[], missing: MissingEdge[]) => void;
   setLastValidationResult: (result: 'valid' | 'invalid' | 'pending' | null) => void;
   setActiveMainTab: (tab: MainTabId) => void;
+  setViewportRestored: () => void;
 
   // Import/Export
   exportDAG: () => DAGDefinition;
   importDAG: (
-    dag: DAGDefinition & { layout?: { positions: Record<string, { x: number; y: number }> } }
+    dag: DAGDefinition & {
+      layout?: { positions: Record<string, { x: number; y: number }>; viewport?: Viewport };
+    }
   ) => void;
   clearDAG: () => void;
 
@@ -93,6 +104,7 @@ const generateId = () => `node_${Date.now()}_${Math.random().toString(36).substr
 const initialState: DAGState = {
   nodes: [],
   edges: [],
+  viewport: null,
   selectedNodeId: null,
   context: {},
   metadata: {
@@ -110,6 +122,7 @@ const initialState: DAGState = {
   edgeStatuses: [],
   missingEdges: [],
   lastValidationResult: null,
+  shouldRestoreViewport: false,
 };
 
 export const useDAGStore = create<DAGState & DAGActions>()(
@@ -220,6 +233,12 @@ export const useDAGStore = create<DAGState & DAGActions>()(
       });
     },
 
+    setViewport: (viewport) => {
+      set((state) => {
+        state.viewport = viewport;
+      });
+    },
+
     setContext: (context) => {
       set((state) => {
         state.context = context;
@@ -294,6 +313,12 @@ export const useDAGStore = create<DAGState & DAGActions>()(
       });
     },
 
+    setViewportRestored: () => {
+      set((state) => {
+        state.shouldRestoreViewport = false;
+      });
+    },
+
     exportDAG: () => {
       const state = get();
       return {
@@ -309,6 +334,7 @@ export const useDAGStore = create<DAGState & DAGActions>()(
           positions: Object.fromEntries(
             state.nodes.map((n) => [n.id, n.position])
           ),
+          viewport: state.viewport || undefined,
         },
       };
     },
@@ -343,6 +369,8 @@ export const useDAGStore = create<DAGState & DAGActions>()(
         state.validationErrors = [];
         state.structuredErrors = [];
         state.previewData = null;
+        state.viewport = dag.layout?.viewport || null;
+        state.shouldRestoreViewport = !!dag.layout?.viewport;
       });
     },
 
@@ -367,6 +395,9 @@ export const useDAGStore = create<DAGState & DAGActions>()(
 // Selectors
 export const selectNodes = (state: DAGState & DAGActions) => state.nodes;
 export const selectEdges = (state: DAGState & DAGActions) => state.edges;
+export const selectViewport = (state: DAGState & DAGActions) => state.viewport;
+export const selectShouldRestoreViewport = (state: DAGState & DAGActions) =>
+  state.shouldRestoreViewport;
 export const selectSelectedNodeId = (state: DAGState & DAGActions) => state.selectedNodeId;
 export const selectContext = (state: DAGState & DAGActions) => state.context;
 export const selectMetadata = (state: DAGState & DAGActions) => state.metadata;
