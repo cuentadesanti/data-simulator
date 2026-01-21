@@ -3,6 +3,7 @@ import {
   ReactFlow,
   Background,
   Controls,
+  ControlButton,
   MiniMap,
   Panel,
   useNodesState,
@@ -79,6 +80,7 @@ const DAGCanvas = () => {
   const shouldRestoreViewport = useDAGStore(selectShouldRestoreViewport);
   const setStoreViewport = useDAGStore((state) => state.setViewport);
   const setViewportRestored = useDAGStore((state) => state.setViewportRestored);
+  const autoLayoutNodes = useDAGStore((state) => state.autoLayoutNodes);
 
   const currentProjectId = useProjectStore(selectCurrentProjectId);
   const { setViewport: setFlowViewport } = useReactFlow();
@@ -311,7 +313,26 @@ const DAGCanvas = () => {
         connectionLineType={ConnectionLineType.Bezier}
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-        <Controls className="!bg-white !border !border-gray-200 !rounded-lg !shadow-md" />
+        <Controls className="!bg-white !border !border-gray-200 !rounded-lg !shadow-md">
+          <ControlButton onClick={autoLayoutNodes} title="Auto-layout nodes (topological order)">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ maxWidth: '16px', maxHeight: '16px' }}
+            >
+              <circle cx="5" cy="12" r="3" />
+              <circle cx="19" cy="6" r="3" />
+              <circle cx="19" cy="18" r="3" />
+              <line x1="8" y1="12" x2="16" y2="6" />
+              <line x1="8" y1="12" x2="16" y2="18" />
+            </svg>
+          </ControlButton>
+        </Controls>
         <MiniMap
           nodeColor={(node) => {
             const data = node.data as unknown as FlowNodeData;

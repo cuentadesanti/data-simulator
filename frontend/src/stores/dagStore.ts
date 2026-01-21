@@ -94,6 +94,9 @@ interface DAGActions {
   ) => void;
   clearDAG: () => void;
 
+  // Layout
+  autoLayoutNodes: () => void;
+
   // Utility
   getSelectedNode: () => NodeConfig | null;
   getNodeById: (nodeId: string) => NodeConfig | null;
@@ -376,6 +379,78 @@ export const useDAGStore = create<DAGState & DAGActions>()(
 
     clearDAG: () => {
       set(initialState);
+    },
+
+    autoLayoutNodes: () => {
+      set((state) => {
+        const nodes = state.nodes;
+        const edges = state.edges;
+
+        if (nodes.length === 0) return;
+
+        // Build adjacency maps
+        const children = new Map<string, string[]>();
+        const parents = new Map<string, string[]>();
+        for (const node of nodes) {
+          children.set(node.id, []);
+          parents.set(node.id, []);
+        }
+        for (const edge of edges) {
+          children.get(edge.source)?.push(edge.target);
+          parents.get(edge.target)?.push(edge.source);
+        }
+
+        // Compute depth for each node using BFS from roots
+        const depth = new Map<string, number>();
+        const roots = nodes.filter((n) => (parents.get(n.id)?.length ?? 0) === 0);
+
+        // If no roots (cycle), just use all nodes as depth 0
+        if (roots.length === 0) {
+          nodes.forEach((n) => depth.set(n.id, 0));
+        } else {
+          // BFS to compute max depth from any root
+          const queue: { id: string; d: number }[] = roots.map((n) => ({ id: n.id, d: 0 }));
+          while (queue.length > 0) {
+            const { id, d } = queue.shift()!;
+            const currentDepth = depth.get(id) ?? -1;
+            if (d > currentDepth) {
+              depth.set(id, d);
+              for (const child of children.get(id) ?? []) {
+                queue.push({ id: child, d: d + 1 });
+              }
+            }
+          }
+        }
+
+        // Group nodes by depth
+        const layers = new Map<number, string[]>();
+        for (const node of nodes) {
+          const d = depth.get(node.id) ?? 0;
+          if (!layers.has(d)) layers.set(d, []);
+          layers.get(d)!.push(node.id);
+        }
+
+        // Sort layers by depth, sort nodes within each layer alphabetically
+        const sortedDepths = Array.from(layers.keys()).sort((a, b) => a - b);
+
+        // Layout constants (vertical: parents on top, children below)
+        const startX = 100;
+        const startY = 100;
+        const nodeGapX = 250;
+        const layerGapY = 250;
+
+        // Assign positions
+        for (const d of sortedDepths) {
+          const layerNodes = layers.get(d)!.sort();
+          const y = startY + d * layerGapY;
+          layerNodes.forEach((nodeId, index) => {
+            const node = state.nodes.find((n) => n.id === nodeId);
+            if (node) {
+              node.position = { x: startX + index * nodeGapX, y };
+            }
+          });
+        }
+      });
     },
 
     getSelectedNode: () => {
