@@ -3,7 +3,7 @@ import json
 import sys
 
 # Configuration
-PROJECT_NAME = "Reference: Socio-Economic Model (Complex)"
+PROJECT_NAME = "Reference: Socio-Economic Model (Fixed)"
 PROJECT_DESCRIPTION = """Complex DAG demonstrating categorical logic, formula lookups, logits (softmax), and tail replacement.
 
 Features:
@@ -13,7 +13,7 @@ Features:
 - Softmax logic for categorical selection (Occupation)
 - Lognormal income with semantic offsets
 - Pareto tail replacement for high earners
-M
+
 Model:
 Region -> Education -> Skill -> Occupation -> Income
 """
@@ -82,7 +82,7 @@ def create_dag_payload():
             # ---------------------------------------------------------
             {
                 "id": "skill",
-                "name": "Skill Level",
+                "name": "Skill",
                 "kind": "stochastic",
                 "dtype": "float",
                 "scope": "row",
@@ -100,7 +100,7 @@ def create_dag_payload():
             # ---------------------------------------------------------
             {
                 "id": "logit_low",
-                "name": "Logit (LowSkill)",
+                "name": "Logit Low",
                 "kind": "deterministic",
                 "dtype": "float",
                 "scope": "row",
@@ -108,7 +108,7 @@ def create_dag_payload():
             },
             {
                 "id": "logit_mid",
-                "name": "Logit (MidSkill)",
+                "name": "Logit Mid",
                 "kind": "deterministic",
                 "dtype": "float",
                 "scope": "row",
@@ -116,7 +116,7 @@ def create_dag_payload():
             },
             {
                 "id": "logit_high",
-                "name": "Logit (HighSkill)",
+                "name": "Logit High",
                 "kind": "deterministic",
                 "dtype": "float",
                 "scope": "row",
@@ -124,7 +124,7 @@ def create_dag_payload():
             },
             {
                 "id": "exp_sum", 
-                "name": "Sum Exp Logits",
+                "name": "Exp Sum",
                 "kind": "deterministic",
                 "dtype": "float",
                 "scope": "row",
@@ -132,7 +132,7 @@ def create_dag_payload():
             },
             {
                 "id": "prob_low",
-                "name": "P(LowSkill)",
+                "name": "Prob Low",
                 "kind": "deterministic",
                 "dtype": "float",
                 "scope": "row",
@@ -140,7 +140,7 @@ def create_dag_payload():
             },
             {
                 "id": "prob_mid",
-                "name": "P(MidSkill)",
+                "name": "Prob Mid",
                 "kind": "deterministic",
                 "dtype": "float",
                 "scope": "row",
@@ -148,7 +148,7 @@ def create_dag_payload():
             },
             {
                 "id": "u_occ",
-                "name": "U(Occupation)",
+                "name": "U Occ",
                 "kind": "stochastic",
                 "dtype": "float",
                 "scope": "row",
@@ -187,7 +187,7 @@ def create_dag_payload():
             # ---------------------------------------------------------
             {
                 "id": "raw_income",
-                "name": "Raw Individual Income",
+                "name": "Raw Income",
                 "kind": "stochastic",
                 "dtype": "float",
                 "scope": "row",
@@ -215,7 +215,7 @@ def create_dag_payload():
             },
             {
                 "id": "individual_income",
-                "name": "Final Individual Income",
+                "name": "Individual Income",
                 "kind": "deterministic",
                 "dtype": "float",
                 "scope": "row",

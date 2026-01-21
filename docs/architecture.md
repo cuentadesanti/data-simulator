@@ -48,6 +48,12 @@ To ensure stability while maintaining user-friendliness, the backend implements 
 - **Immer Integration**: State mutations are handled via Immer to ensure immutability with clean syntax.
 - **Sync with Backend**: The store handles automatic validation rounds and preview generation fetches.
 
+### Layout Persistence
+The frontend persists visual layout information alongside the DAG structure:
+- **Node Positions**: Each node's (x, y) position on the canvas is saved in `layout.positions`.
+- **Viewport State**: Pan (x, y) and zoom level are saved in `layout.viewport` and restored on project load.
+- **Bounds Validation**: Node positions are validated to stay within reasonable bounds (±100,000 units) to prevent rendering issues.
+
 
 ## 3. Data Flow
 

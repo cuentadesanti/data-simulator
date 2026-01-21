@@ -9,6 +9,7 @@ import type {
   EdgeValidation,
   MissingEdge,
   ValidationError,
+  Viewport,
 } from '../types/dag';
 
 type MainTabId = 'dag' | 'data';
@@ -17,6 +18,7 @@ interface DAGState {
   // Flow state
   nodes: FlowNode[];
   edges: FlowEdge[];
+  viewport: Viewport | null;
 
   // Selection
   selectedNodeId: string | null;
@@ -44,6 +46,9 @@ interface DAGState {
 
   // Validation state
   lastValidationResult: 'valid' | 'invalid' | 'pending' | null;
+
+  // Viewport restoration flag
+  shouldRestoreViewport: boolean;
 }
 
 interface DAGActions {
@@ -57,6 +62,9 @@ interface DAGActions {
   // Edge operations
   addEdge: (source: string, target: string) => void;
   deleteEdge: (edgeId: string) => void;
+
+  // Viewport operations
+  setViewport: (viewport: Viewport) => void;
 
   // Context operations
   setContext: (context: Record<string, unknown>) => void;
@@ -75,13 +83,19 @@ interface DAGActions {
   setEdgeStatuses: (statuses: EdgeValidation[], missing: MissingEdge[]) => void;
   setLastValidationResult: (result: 'valid' | 'invalid' | 'pending' | null) => void;
   setActiveMainTab: (tab: MainTabId) => void;
+  setViewportRestored: () => void;
 
   // Import/Export
   exportDAG: () => DAGDefinition;
   importDAG: (
-    dag: DAGDefinition & { layout?: { positions: Record<string, { x: number; y: number }> } }
+    dag: DAGDefinition & {
+      layout?: { positions: Record<string, { x: number; y: number }>; viewport?: Viewport };
+    }
   ) => void;
   clearDAG: () => void;
+
+  // Layout
+  autoLayoutNodes: () => void;
 
   // Utility
   getSelectedNode: () => NodeConfig | null;
@@ -93,6 +107,7 @@ const generateId = () => `node_${Date.now()}_${Math.random().toString(36).substr
 const initialState: DAGState = {
   nodes: [],
   edges: [],
+  viewport: null,
   selectedNodeId: null,
   context: {},
   metadata: {
@@ -110,6 +125,7 @@ const initialState: DAGState = {
   edgeStatuses: [],
   missingEdges: [],
   lastValidationResult: null,
+  shouldRestoreViewport: false,
 };
 
 export const useDAGStore = create<DAGState & DAGActions>()(
@@ -220,6 +236,12 @@ export const useDAGStore = create<DAGState & DAGActions>()(
       });
     },
 
+    setViewport: (viewport) => {
+      set((state) => {
+        state.viewport = viewport;
+      });
+    },
+
     setContext: (context) => {
       set((state) => {
         state.context = context;
@@ -294,6 +316,12 @@ export const useDAGStore = create<DAGState & DAGActions>()(
       });
     },
 
+    setViewportRestored: () => {
+      set((state) => {
+        state.shouldRestoreViewport = false;
+      });
+    },
+
     exportDAG: () => {
       const state = get();
       return {
@@ -305,6 +333,12 @@ export const useDAGStore = create<DAGState & DAGActions>()(
         })),
         context: state.context,
         metadata: state.metadata,
+        layout: {
+          positions: Object.fromEntries(
+            state.nodes.map((n) => [n.id, n.position])
+          ),
+          viewport: state.viewport || undefined,
+        },
       };
     },
 
@@ -338,11 +372,85 @@ export const useDAGStore = create<DAGState & DAGActions>()(
         state.validationErrors = [];
         state.structuredErrors = [];
         state.previewData = null;
+        state.viewport = dag.layout?.viewport || null;
+        state.shouldRestoreViewport = !!dag.layout?.viewport;
       });
     },
 
     clearDAG: () => {
       set(initialState);
+    },
+
+    autoLayoutNodes: () => {
+      set((state) => {
+        const nodes = state.nodes;
+        const edges = state.edges;
+
+        if (nodes.length === 0) return;
+
+        // Build adjacency maps
+        const children = new Map<string, string[]>();
+        const parents = new Map<string, string[]>();
+        for (const node of nodes) {
+          children.set(node.id, []);
+          parents.set(node.id, []);
+        }
+        for (const edge of edges) {
+          children.get(edge.source)?.push(edge.target);
+          parents.get(edge.target)?.push(edge.source);
+        }
+
+        // Compute depth for each node using BFS from roots
+        const depth = new Map<string, number>();
+        const roots = nodes.filter((n) => (parents.get(n.id)?.length ?? 0) === 0);
+
+        // If no roots (cycle), just use all nodes as depth 0
+        if (roots.length === 0) {
+          nodes.forEach((n) => depth.set(n.id, 0));
+        } else {
+          // BFS to compute max depth from any root
+          const queue: { id: string; d: number }[] = roots.map((n) => ({ id: n.id, d: 0 }));
+          while (queue.length > 0) {
+            const { id, d } = queue.shift()!;
+            const currentDepth = depth.get(id) ?? -1;
+            if (d > currentDepth) {
+              depth.set(id, d);
+              for (const child of children.get(id) ?? []) {
+                queue.push({ id: child, d: d + 1 });
+              }
+            }
+          }
+        }
+
+        // Group nodes by depth
+        const layers = new Map<number, string[]>();
+        for (const node of nodes) {
+          const d = depth.get(node.id) ?? 0;
+          if (!layers.has(d)) layers.set(d, []);
+          layers.get(d)!.push(node.id);
+        }
+
+        // Sort layers by depth, sort nodes within each layer alphabetically
+        const sortedDepths = Array.from(layers.keys()).sort((a, b) => a - b);
+
+        // Layout constants (vertical: parents on top, children below)
+        const startX = 100;
+        const startY = 100;
+        const nodeGapX = 250;
+        const layerGapY = 250;
+
+        // Assign positions
+        for (const d of sortedDepths) {
+          const layerNodes = layers.get(d)!.sort();
+          const y = startY + d * layerGapY;
+          layerNodes.forEach((nodeId, index) => {
+            const node = state.nodes.find((n) => n.id === nodeId);
+            if (node) {
+              node.position = { x: startX + index * nodeGapX, y };
+            }
+          });
+        }
+      });
     },
 
     getSelectedNode: () => {
@@ -362,6 +470,9 @@ export const useDAGStore = create<DAGState & DAGActions>()(
 // Selectors
 export const selectNodes = (state: DAGState & DAGActions) => state.nodes;
 export const selectEdges = (state: DAGState & DAGActions) => state.edges;
+export const selectViewport = (state: DAGState & DAGActions) => state.viewport;
+export const selectShouldRestoreViewport = (state: DAGState & DAGActions) =>
+  state.shouldRestoreViewport;
 export const selectSelectedNodeId = (state: DAGState & DAGActions) => state.selectedNodeId;
 export const selectContext = (state: DAGState & DAGActions) => state.context;
 export const selectMetadata = (state: DAGState & DAGActions) => state.metadata;

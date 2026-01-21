@@ -17,7 +17,7 @@ graph TD
 ## Core Components
 
 ### 1. Canvas (`/components/Canvas`)
-- **DAGCanvas**: The main React Flow instance. Handles node/edge rendering, drag-and-drop, and selection.
+- **DAGCanvas**: The main React Flow instance. Handles node/edge rendering, drag-and-drop, and selection. Supports **viewport persistence** - pan/zoom state is saved with the project and restored on reload.
 - **CustomNode**: Specialized node component that reflects node status (valid/invalid) and kind (stochastic/deterministic).
 
 ### 2. Panel (`/components/Panel`)

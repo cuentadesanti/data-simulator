@@ -3,12 +3,14 @@ import {
   ReactFlow,
   Background,
   Controls,
+  ControlButton,
   MiniMap,
   Panel,
   useNodesState,
   useEdgesState,
   BackgroundVariant,
   ConnectionLineType,
+  useReactFlow,
 } from '@xyflow/react';
 import type {
   Connection,
@@ -26,7 +28,10 @@ import {
   selectEdges,
   selectSelectedNodeId,
   selectEdgeStatuses,
+  selectViewport,
+  selectShouldRestoreViewport,
 } from '../../stores/dagStore';
+import { useProjectStore, selectCurrentProjectId } from '../../stores/projectStore';
 import CustomNode from './CustomNode';
 import type { FlowNodeData } from '../../types/dag';
 import { useToast } from '../common';
@@ -70,6 +75,15 @@ const DAGCanvas = () => {
   const deleteEdgeAction = useDAGStore((state) => state.deleteEdge);
   const deleteNode = useDAGStore((state) => state.deleteNode);
   const addNodeAction = useDAGStore((state) => state.addNode);
+
+  const viewport = useDAGStore(selectViewport);
+  const shouldRestoreViewport = useDAGStore(selectShouldRestoreViewport);
+  const setStoreViewport = useDAGStore((state) => state.setViewport);
+  const setViewportRestored = useDAGStore((state) => state.setViewportRestored);
+  const autoLayoutNodes = useDAGStore((state) => state.autoLayoutNodes);
+
+  const currentProjectId = useProjectStore(selectCurrentProjectId);
+  const { setViewport: setFlowViewport } = useReactFlow();
   const { addToast } = useToast();
 
   // Convert store nodes to React Flow nodes with selection state
@@ -143,6 +157,18 @@ const DAGCanvas = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(flowNodes as Node[]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flowEdges as Edge[]);
 
+  // Restore viewport
+  useEffect(() => {
+    if (shouldRestoreViewport && viewport) {
+      // Small timeout to ensure Flow is ready, and to override fitView
+      const timer = setTimeout(() => {
+        setFlowViewport(viewport);
+        setViewportRestored();
+      }, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldRestoreViewport, viewport, setFlowViewport, setViewportRestored]);
+
   // Sync store changes to local state
   useEffect(() => {
     setNodes(flowNodes as Node[]);
@@ -209,6 +235,14 @@ const DAGCanvas = () => {
     [onNodesChange, updateNodePosition]
   );
 
+  // Handle viewport changes
+  const onMoveEnd = useCallback(
+    (_event: unknown, viewport: { x: number; y: number; zoom: number }) => {
+      setStoreViewport(viewport);
+    },
+    [setStoreViewport]
+  );
+
   // Handle edge changes (including deletions)
   const handleEdgesChange = useCallback(
     (changes: EdgeChange<Edge>[]) => {
@@ -257,8 +291,10 @@ const DAGCanvas = () => {
         onConnect={onConnect}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        onMoveEnd={onMoveEnd}
+        key={currentProjectId || 'empty'}
         nodeTypes={nodeTypes}
-        fitView
+        fitView // Default behavior for new/legacy, overridden by restore
         attributionPosition="bottom-right"
         minZoom={0.1}
         maxZoom={2}
@@ -277,7 +313,26 @@ const DAGCanvas = () => {
         connectionLineType={ConnectionLineType.Bezier}
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-        <Controls className="!bg-white !border !border-gray-200 !rounded-lg !shadow-md" />
+        <Controls className="!bg-white !border !border-gray-200 !rounded-lg !shadow-md">
+          <ControlButton onClick={autoLayoutNodes} title="Auto-layout nodes (topological order)">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ maxWidth: '16px', maxHeight: '16px' }}
+            >
+              <circle cx="5" cy="12" r="3" />
+              <circle cx="19" cy="6" r="3" />
+              <circle cx="19" cy="18" r="3" />
+              <line x1="8" y1="12" x2="16" y2="6" />
+              <line x1="8" y1="12" x2="16" y2="18" />
+            </svg>
+          </ControlButton>
+        </Controls>
         <MiniMap
           nodeColor={(node) => {
             const data = node.data as unknown as FlowNodeData;

@@ -73,6 +73,23 @@ export interface DAGEdge {
   target: string;
 }
 
+// Layout configuration
+export interface NodePosition {
+  x: number;
+  y: number;
+}
+
+export interface Viewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export interface Layout {
+  positions: Record<string, NodePosition>;
+  viewport?: Viewport;
+}
+
 // Generation metadata
 export interface GenerationMetadata {
   sample_size: number;
@@ -87,6 +104,7 @@ export interface DAGDefinition {
   edges: DAGEdge[];
   context: Record<string, unknown>;
   metadata: GenerationMetadata;
+  layout?: Layout;
 }
 
 // React Flow node data

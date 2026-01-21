@@ -250,6 +250,42 @@ class GenerationMetadata(BaseModel):
 
 
 # =============================================================================
+# Layout Configuration
+# =============================================================================
+
+
+# Position bounds to prevent issues with extremely large values
+POSITION_MIN = -100000.0
+POSITION_MAX = 100000.0
+
+
+class NodePosition(BaseModel):
+    """Position of a node in the visual editor."""
+
+    x: float = Field(..., ge=POSITION_MIN, le=POSITION_MAX, description="X coordinate")
+    y: float = Field(..., ge=POSITION_MIN, le=POSITION_MAX, description="Y coordinate")
+
+
+
+class Viewport(BaseModel):
+    """Viewport state (pan position and zoom level)."""
+
+    x: float = Field(..., description="Viewport value x")
+    y: float = Field(..., description="Viewport value y")
+    zoom: float = Field(..., description="Zoom level")
+
+
+class Layout(BaseModel):
+    """Visual layout information for the DAG editor."""
+
+    positions: dict[str, NodePosition] = Field(
+        default_factory=dict,
+        description="Node positions keyed by node ID"
+    )
+    viewport: Viewport | None = Field(None, description="Viewport state (x, y, zoom)")
+
+
+# =============================================================================
 # DAG Definition (Top-level)
 # =============================================================================
 
@@ -266,6 +302,7 @@ class DAGDefinition(BaseModel):
     )
     constraints: list[Constraint] = Field(default_factory=list, description="Row constraints")
     metadata: GenerationMetadata = Field(..., description="Generation metadata")
+    layout: Layout | None = Field(None, description="Visual layout for the editor")
 
     @field_validator("nodes")
     @classmethod
