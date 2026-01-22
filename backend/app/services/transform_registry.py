@@ -439,8 +439,6 @@ ALLOWED_AST_NODES = {
     ast.Name,
     ast.Load,
     ast.Constant,
-    ast.Num,  # Python 3.7 compatibility
-    ast.Str,  # Python 3.7 compatibility
     # Operators
     ast.Add,
     ast.Sub,

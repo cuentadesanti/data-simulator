@@ -8,6 +8,7 @@ import {
     Play,
     Loader2,
     ChevronDown,
+    ChevronRight,
     Target,
     BarChart3,
     ArrowRight,
@@ -37,6 +38,8 @@ export const ModelsPanel = () => {
     const [testSize, setTestSize] = useState(0.2);
     const [modelParams, setModelParams] = useState<Record<string, any>>({});
     const [paramErrors, setParamErrors] = useState<Record<string, string>>({});
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [showInternal, setShowInternal] = useState(false);
 
     // Fit results
     const [isFitting, setIsFitting] = useState(false);
@@ -78,7 +81,6 @@ export const ModelsPanel = () => {
     );
 
     const currentModelType = modelTypes.find((m) => m.name === selectedModel);
-    const isClustering = currentModelType?.task_type === 'clustering';
 
     const handleToggleFeature = (colName: string) => {
         setSelectedFeatures((prev) =>
@@ -116,7 +118,7 @@ export const ModelsPanel = () => {
             return;
         }
 
-        if (!isClustering && !targetColumn) {
+        if (!targetColumn) {
             setFitError('Please select a target column');
             return;
         }
@@ -142,7 +144,7 @@ export const ModelsPanel = () => {
                 pipeline_version_id: currentVersionId,
                 name: modelName || `${selectedModel}_${Date.now()}`,
                 model_name: selectedModel,
-                target: isClustering ? undefined : targetColumn,
+                target: targetColumn,
                 features: selectedFeatures,
                 model_params: modelParams,
                 split_spec: {
@@ -223,134 +225,182 @@ export const ModelsPanel = () => {
                 </div>
 
                 {/* Model Parameters */}
-                {currentModelType && currentModelType.parameters.length > 0 && (
-                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-100 space-y-3">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                            <Settings size={12} />
-                            Hyperparameters
-                        </div>
-                        <div className="space-y-3">
-                            {currentModelType.parameters.map((p) => {
-                                const hasError = !!paramErrors[p.name];
-                                const isChoice = p.type === 'choice' && p.choices && p.choices.length > 0;
-                                const isBoolean = p.type === 'boolean' || p.type === 'bool';
+                {currentModelType && currentModelType.parameters.length > 0 && (() => {
+                    const coreParams = currentModelType.parameters.filter(p => p.ui_group === 'core');
+                    const advancedParams = currentModelType.parameters.filter(p => p.ui_group === 'advanced' || !p.ui_group);
+                    const internalParams = currentModelType.parameters.filter(p => p.ui_group === 'internal');
 
-                                return (
-                                    <div key={p.name}>
-                                        <div className="flex justify-between items-center mb-1">
-                                            <label className="text-xs font-medium text-gray-700">
-                                                {p.display_name}
-                                            </label>
-                                            <span className={`text-[10px] font-mono italic ${hasError ? 'text-red-500' : 'text-gray-400'}`}>
-                                                {p.type}
-                                            </span>
-                                        </div>
+                    const renderParam = (p: typeof currentModelType.parameters[0]) => {
+                        const hasError = !!paramErrors[p.name];
+                        const isChoice = p.type === 'choice' && p.choices && p.choices.length > 0;
+                        const isBoolean = p.type === 'boolean' || p.type === 'bool';
 
-                                        {isBoolean ? (
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={!!modelParams[p.name]}
-                                                    onChange={(e) => handleUpdateParam(p.name, e.target.checked, p.type)}
-                                                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                                />
-                                                <span className="text-xs text-gray-500">Enabled</span>
-                                            </label>
-                                        ) : isChoice ? (
-                                            <div className="relative">
-                                                <select
-                                                    value={modelParams[p.name] === null ? 'null' : String(modelParams[p.name] ?? p.default)}
-                                                    onChange={(e) => {
-                                                        const val = e.target.value;
-                                                        handleUpdateParam(p.name, val === 'null' ? null : val, p.type);
-                                                    }}
-                                                    className={`w-full appearance-none bg-white border rounded-md pl-2 pr-8 py-1.5 text-xs focus:outline-none focus:ring-1 ${hasError
-                                                        ? 'border-red-300 focus:ring-red-500'
-                                                        : 'border-gray-300 focus:ring-purple-500'
-                                                        }`}
-                                                >
-                                                    {p.choices?.map((choice) => (
-                                                        <option key={choice === null ? 'null' : String(choice)} value={choice === null ? 'null' : String(choice)}>
-                                                            {choice === null ? 'None' : String(choice)}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                <ChevronDown
-                                                    size={12}
-                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                                                />
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <input
-                                                    type={p.type === 'int' || p.type === 'integer' || p.type === 'float' || p.type === 'number' ? 'number' : 'text'}
-                                                    step={p.type === 'float' || p.type === 'number' ? '0.01' : '1'}
-                                                    value={modelParams[p.name] ?? ''}
-                                                    onChange={(e) => {
-                                                        const val = e.target.value;
-                                                        const parsed = (p.type === 'int' || p.type === 'integer') ? parseInt(val) : (p.type === 'float' || p.type === 'number') ? parseFloat(val) : val;
-                                                        handleUpdateParam(p.name, isNaN(parsed as any) ? val : parsed, p.type);
-                                                    }}
-                                                    placeholder={String(p.default)}
-                                                    className={`w-full border rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-1 ${hasError
-                                                        ? 'border-red-300 bg-red-50 focus:ring-red-500'
-                                                        : 'border-gray-300 focus:ring-purple-500'
-                                                        }`}
-                                                />
-                                                {hasError && (
-                                                    <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1">
-                                                        <AlertCircle size={10} />
-                                                        {paramErrors[p.name]}
-                                                    </p>
-                                                )}
-                                            </>
-                                        )}
-                                        <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">
-                                            {p.description}
-                                        </p>
+                        return (
+                            <div key={p.name}>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="text-xs font-medium text-gray-700">
+                                        {p.display_name}
+                                    </label>
+                                    <span className={`text-[10px] font-mono italic ${hasError ? 'text-red-500' : 'text-gray-400'}`}>
+                                        {p.type}
+                                    </span>
+                                </div>
+
+                                {isBoolean ? (
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!modelParams[p.name]}
+                                            onChange={(e) => handleUpdateParam(p.name, e.target.checked, p.type)}
+                                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                        />
+                                        <span className="text-xs text-gray-500">Enabled</span>
+                                    </label>
+                                ) : isChoice ? (
+                                    <div className="relative">
+                                        <select
+                                            value={modelParams[p.name] === null ? 'null' : String(modelParams[p.name] ?? p.default)}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                handleUpdateParam(p.name, val === 'null' ? null : val, p.type);
+                                            }}
+                                            className={`w-full appearance-none bg-white border rounded-md pl-2 pr-8 py-1.5 text-xs focus:outline-none focus:ring-1 ${hasError
+                                                ? 'border-red-300 focus:ring-red-500'
+                                                : 'border-gray-300 focus:ring-purple-500'
+                                                }`}
+                                        >
+                                            {p.choices?.map((choice) => (
+                                                <option key={choice === null ? 'null' : String(choice)} value={choice === null ? 'null' : String(choice)}>
+                                                    {choice === null ? 'None' : String(choice)}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown
+                                            size={12}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                                        />
                                     </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
+                                ) : (
+                                    <>
+                                        <input
+                                            type={p.type === 'int' || p.type === 'integer' || p.type === 'float' || p.type === 'number' ? 'number' : 'text'}
+                                            step={p.type === 'float' || p.type === 'number' ? '0.01' : '1'}
+                                            value={modelParams[p.name] ?? ''}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                const parsed = (p.type === 'int' || p.type === 'integer') ? parseInt(val) : (p.type === 'float' || p.type === 'number') ? parseFloat(val) : val;
+                                                handleUpdateParam(p.name, isNaN(parsed as any) ? val : parsed, p.type);
+                                            }}
+                                            placeholder={String(p.default)}
+                                            className={`w-full border rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-1 ${hasError
+                                                ? 'border-red-300 bg-red-50 focus:ring-red-500'
+                                                : 'border-gray-300 focus:ring-purple-500'
+                                                }`}
+                                        />
+                                        {hasError && (
+                                            <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1">
+                                                <AlertCircle size={10} />
+                                                {paramErrors[p.name]}
+                                            </p>
+                                        )}
+                                    </>
+                                )}
+                                <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">
+                                    {p.description}
+                                </p>
+                            </div>
+                        );
+                    };
 
-                {/* Target column - Hidden for clustering */}
-                {!isClustering && (
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
-                            <Target size={12} />
-                            Target Column
-                        </label>
-                        <div className="relative">
-                            <select
-                                value={targetColumn}
-                                onChange={(e) => setTargetColumn(e.target.value)}
-                                className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-md pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                            >
-                                <option value="">Select target...</option>
-                                {numericColumns.map((col) => (
-                                    <option key={col.name} value={col.name}>
-                                        {col.name}
-                                    </option>
-                                ))}
-                            </select>
-                            <ChevronDown
-                                size={14}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                            />
+                    return (
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-100 space-y-3">
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                                <Settings size={12} />
+                                Hyperparameters
+                            </div>
+
+                            {/* Core Parameters - Always visible */}
+                            {coreParams.length > 0 && (
+                                <div className="space-y-3">
+                                    {coreParams.map(renderParam)}
+                                </div>
+                            )}
+
+                            {/* Advanced Parameters - Collapsible */}
+                            {advancedParams.length > 0 && (
+                                <div className="border-t border-gray-200 pt-2 mt-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAdvanced(!showAdvanced)}
+                                        className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 w-full"
+                                    >
+                                        {showAdvanced ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                                        Advanced ({advancedParams.length})
+                                    </button>
+                                    {showAdvanced && (
+                                        <div className="space-y-3 mt-2">
+                                            {advancedParams.map(renderParam)}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Internal Parameters - Collapsible */}
+                            {internalParams.length > 0 && (
+                                <div className="border-t border-gray-200 pt-2 mt-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowInternal(!showInternal)}
+                                        className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-gray-600 w-full"
+                                    >
+                                        {showInternal ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                                        Internal ({internalParams.length})
+                                    </button>
+                                    {showInternal && (
+                                        <div className="space-y-3 mt-2">
+                                            {internalParams.map(renderParam)}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
+                    );
+                })()}
+
+                {/* Target column */}
+                <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                        <Target size={12} />
+                        Target Column
+                    </label>
+                    <div className="relative">
+                        <select
+                            value={targetColumn}
+                            onChange={(e) => setTargetColumn(e.target.value)}
+                            className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-md pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        >
+                            <option value="">Select target...</option>
+                            {numericColumns.map((col) => (
+                                <option key={col.name} value={col.name}>
+                                    {col.name}
+                                </option>
+                            ))}
+                        </select>
+                        <ChevronDown
+                            size={14}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                        />
                     </div>
-                )}
+                </div>
 
                 {/* Feature columns */}
                 <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                        {isClustering ? 'Features' : 'Feature Columns'} ({selectedFeatures.length} selected)
+                        Feature Columns ({selectedFeatures.length} selected)
                     </label>
                     <div className="border border-gray-200 rounded-md max-h-40 overflow-y-auto">
                         {numericColumns
-                            .filter((col) => isClustering || col.name !== targetColumn)
+                            .filter((col) => col.name !== targetColumn)
                             .map((col) => (
                                 <label
                                     key={col.name}
@@ -388,7 +438,7 @@ export const ModelsPanel = () => {
                 {/* Fit button */}
                 <button
                     onClick={handleFit}
-                    disabled={isFitting || (!isClustering && !targetColumn) || selectedFeatures.length === 0}
+                    disabled={isFitting || !targetColumn || selectedFeatures.length === 0}
                     className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                     {isFitting ? (

@@ -60,13 +60,20 @@ export interface ModelParameter {
     default: unknown;
     description: string;
     choices?: any[];
+    min_value?: number | null;
+    max_value?: number | null;
+    recommended_min?: number | null;
+    recommended_max?: number | null;
+    log_scale?: boolean;
+    ui_group?: 'core' | 'advanced' | 'internal';
 }
 
 export interface ModelTypeInfo {
     name: string;
     display_name: string;
     description: string;
-    task_type: 'regression' | 'classification' | 'clustering';
+    task_type: 'regression';
+    category?: string;
     parameters: ModelParameter[];
 }
 

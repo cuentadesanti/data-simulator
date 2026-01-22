@@ -7,7 +7,7 @@ adding transform steps, and materializing data.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
@@ -201,7 +201,7 @@ def add_step(
         "output_column": output_column,
         "params": params,
         "order": len(version.steps) + 1,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     
     # Build lineage entry

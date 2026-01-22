@@ -219,38 +219,38 @@ def main():
             for name, coef in list(model1_result["coefficients"].items())[:5]:
                 print(f"    {name}: {coef:.4f}")
         
-        # Step 6: Create a binary target for classification
-        print("\n[7/8] Adding binary target and fitting logistic regression...")
+        # Step 6: Create a new feature and fit ridge regression
+        print("\n[7/8] Adding feature and fitting ridge regression...")
         
-        # Add a formula to create high_income binary target
+        # Add a formula to create a combined feature
         step5_result = add_step(
             db=db,
             pipeline_id=pipeline_id,
             version_id=version_id,
             step_spec={
                 "type": "formula",
-                "output_column": "high_income",
-                "params": {"expression": "where(income > 50000, 1, 0)"},
+                "output_column": "age_income_ratio",
+                "params": {"expression": "age / income"},
             },
             preview_limit=5,
         )
         version_id = step5_result["new_version_id"]
-        print(f"✓ Added binary target 'high_income'")
+        print(f"✓ Added feature 'age_income_ratio'")
         
-        # Fit logistic regression
+        # Fit ridge regression
         model2_result = fit_model(
             db=db,
             pipeline_version_id=version_id,
-            name="High Income Classifier",
-            model_name="logistic_regression",
-            target="high_income",
+            name="Alternative Predictor",
+            model_name="ridge",
+            target="income",
             features=["age", "education", "log_income"],
-            model_params={"C": 1.0, "max_iter": 200},
+            model_params={"alpha": 0.5},
             split_spec={"type": "random", "test_size": 0.2, "random_state": 42},
         )
         
         model2_id = model2_result["model_id"]
-        print(f"✓ Fitted logistic regression model: {model2_id[:8]}...")
+        print(f"✓ Fitted ridge regression model: {model2_id[:8]}...")
         print(f"  Metrics:")
         for metric, value in model2_result["metrics"].items():
             print(f"    {metric}: {value:.4f}")

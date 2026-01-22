@@ -133,10 +133,10 @@ class TestModelRegistry:
         registry = get_model_registry()
         models = registry.list_all()
 
-        assert len(models) >= 2  # linear_regression and logistic_regression
+        assert len(models) >= 1
         names = [m["name"] for m in models]
         assert "linear_regression" in names
-        assert "logistic_regression" in names
+        assert "logistic_regression" not in names
 
     def test_get_linear_regression(self):
         """Test getting linear regression model type."""
@@ -146,15 +146,6 @@ class TestModelRegistry:
         assert model is not None
         assert model.name == "linear_regression"
         assert model.task_type == "regression"
-
-    def test_get_logistic_regression(self):
-        """Test getting logistic regression model type."""
-        registry = get_model_registry()
-        model = registry.get("logistic_regression")
-
-        assert model is not None
-        assert model.name == "logistic_regression"
-        assert model.task_type == "classification"
 
     def test_get_unknown_model(self):
         """Test getting an unknown model returns None."""
@@ -166,11 +157,11 @@ class TestModelRegistry:
     def test_model_parameters(self):
         """Test that models expose their parameters."""
         registry = get_model_registry()
-        model = registry.get("logistic_regression")
+        model = registry.get("linear_regression")
 
         params = model.parameters
         param_names = [p.name for p in params]
-        assert "C" in param_names or "c" in param_names.lower() or len(params) >= 0
+        assert len(params) >= 0
 
 
 # =============================================================================
@@ -208,53 +199,24 @@ class TestModelFitting:
         assert "age" in result["coefficients"]
         assert "income" in result["coefficients"]
 
-    def test_fit_logistic_regression(self, db_session: Session, project_with_pipeline):
-        """Test fitting a logistic regression model."""
+    def test_fit_ridge_regression(self, db_session: Session, project_with_pipeline):
+        """Test fitting a Ridge regression model."""
         project, dag_version, pipeline_id, version_id = project_with_pipeline
 
         result = modeling_service.fit_model(
             db=db_session,
             pipeline_version_id=version_id,
-            name="Test Logistic Model",
-            model_name="logistic_regression",
-            target="churned",
-            features=["age", "income", "spending"],
-            model_params={"C": 1.0, "max_iter": 200},
+            name="Test Ridge Model",
+            model_name="ridge",
+            target="spending",
+            features=["age", "income"],
+            model_params={"alpha": 0.5},
             split_spec={"type": "random", "test_size": 0.2, "random_state": 42},
         )
 
         assert "model_id" in result
         assert "metrics" in result
-        assert "accuracy" in result["metrics"]
-
-        # Accuracy should be reasonable
-        assert result["metrics"]["accuracy"] > 0.5
-        
-    def test_fit_kmeans_clustering(self, db_session: Session, project_with_pipeline):
-        """Test fitting a KMeans clustering model."""
-        project, dag_version, pipeline_id, version_id = project_with_pipeline
-        
-        result = modeling_service.fit_model(
-            db=db_session,
-            pipeline_version_id=version_id,
-            name="Test Clustering",
-            model_name="kmeans",
-            target="",  # No target for clustering
-            features=["age", "income", "spending"],
-            model_params={"n_clusters": 3},
-            split_spec={"type": "random", "test_size": 0.2, "random_state": 42},
-        )
-        
-        assert "model_id" in result
-        assert "metrics" in result
-        assert "silhouette_score" in result["metrics"]
-        assert "n_clusters" in result["metrics"]
-        assert result["metrics"]["n_clusters"] == 3
-        
-        # Check cluster centers in coefficients
-        assert "coefficients" in result
-        assert result["coefficients"] is not None
-        assert "_n_clusters" in result["coefficients"]
+        assert "r2" in result["metrics"]
 
     def test_fit_stores_artifact(self, db_session: Session, project_with_pipeline):
         """Test that fitting stores the model artifact."""
@@ -562,23 +524,23 @@ class TestModelingIntegration:
             features=["age", "income"],
         )
 
-        # Fit logistic regression
-        log_result = modeling_service.fit_model(
+        # Fit ridge regression
+        ridge_result = modeling_service.fit_model(
             db=db_session,
             pipeline_version_id=version_id,
-            name="Logistic Model",
-            model_name="logistic_regression",
-            target="churned",
-            features=["age", "income", "spending"],
+            name="Ridge Model",
+            model_name="ridge",
+            target="spending",
+            features=["age", "income"],
         )
 
         # Both should have valid model IDs
-        assert lr_result["model_id"] != log_result["model_id"]
+        assert lr_result["model_id"] != ridge_result["model_id"]
 
         # Both should be retrievable
         lr_detail = modeling_service.get_model_fit(db_session, lr_result["model_id"])
-        log_detail = modeling_service.get_model_fit(db_session, log_result["model_id"])
+        ridge_detail = modeling_service.get_model_fit(db_session, ridge_result["model_id"])
 
         assert lr_detail["model_type"] == "linear_regression"
-        assert log_detail["model_type"] == "logistic_regression"
+        assert ridge_detail["model_type"] == "ridge"
 
