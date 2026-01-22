@@ -3,6 +3,8 @@ import { useState, useMemo } from 'react';
 interface PreviewTableProps {
   data: Record<string, unknown>[];
   columns?: string[] | null;
+  /** Columns to visually highlight (e.g., derived columns in pipeline view) */
+  highlightColumns?: string[];
 }
 
 type SortConfig = {
@@ -87,8 +89,10 @@ const getTypeColor = (type: DataType): string => {
   }
 };
 
-export const PreviewTable = ({ data, columns: columnOrder }: PreviewTableProps) => {
+export const PreviewTable = ({ data, columns: columnOrder, highlightColumns = [] }: PreviewTableProps) => {
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
+
+  const highlightSet = useMemo(() => new Set(highlightColumns), [highlightColumns]);
 
   // Extract columns and detect types
   // Use columnOrder from backend (topological order) if available, otherwise fallback to Object.keys
@@ -187,21 +191,32 @@ export const PreviewTable = ({ data, columns: columnOrder }: PreviewTableProps) 
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-100 sticky left-0 z-20">
               #
             </th>
-            {columns.map(({ key, type }) => (
-              <th
-                key={key}
-                className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100 transition-colors"
-                onClick={() => handleSort(key)}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-gray-900">{key}</span>
-                  <span className={`px-1.5 py-0.5 rounded text-xs font-mono ${getTypeColor(type)}`}>
-                    {getTypeIcon(type)}
-                  </span>
-                  {getSortIcon(key)}
-                </div>
-              </th>
-            ))}
+            {columns.map(({ key, type }) => {
+              const isHighlighted = highlightSet.has(key);
+              return (
+                <th
+                  key={key}
+                  className={`px-4 py-3 text-left cursor-pointer hover:bg-gray-100 transition-colors ${isHighlighted ? 'bg-blue-50 border-l-2 border-blue-400' : ''
+                    }`}
+                  onClick={() => handleSort(key)}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`font-medium ${isHighlighted ? 'text-blue-700' : 'text-gray-900'}`}>
+                      {key}
+                    </span>
+                    {isHighlighted && (
+                      <span className="px-1 py-0.5 bg-blue-100 text-blue-600 text-xs rounded font-medium">
+                        new
+                      </span>
+                    )}
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-mono ${getTypeColor(type)}`}>
+                      {getTypeIcon(type)}
+                    </span>
+                    {getSortIcon(key)}
+                  </div>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -216,9 +231,8 @@ export const PreviewTable = ({ data, columns: columnOrder }: PreviewTableProps) 
                 return (
                   <td
                     key={key}
-                    className={`px-4 py-2 whitespace-nowrap ${
-                      isNull ? 'text-gray-400 italic' : 'text-gray-900'
-                    }`}
+                    className={`px-4 py-2 whitespace-nowrap ${isNull ? 'text-gray-400 italic' : 'text-gray-900'
+                      }`}
                   >
                     {formatValue(value, type)}
                   </td>

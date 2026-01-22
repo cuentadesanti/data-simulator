@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import dag, distributions, projects
+from app.api.routes import dag, distributions, modeling, pipelines, projects, transforms
 from app.core import DataSimulatorError, settings
 
 app = FastAPI(
@@ -38,6 +38,9 @@ async def data_simulator_error_handler(request: Request, exc: DataSimulatorError
 app.include_router(dag.router, prefix="/api/dag", tags=["DAG"])
 app.include_router(distributions.router, prefix="/api/distributions", tags=["Distributions"])
 app.include_router(projects.router, prefix="/api/projects", tags=["Projects"])
+app.include_router(pipelines.router, prefix="/api/pipelines", tags=["Pipelines"])
+app.include_router(transforms.router, prefix="/api/transforms", tags=["Transforms"])
+app.include_router(modeling.router, prefix="/api/modeling", tags=["Modeling"])
 
 
 @app.get("/health")

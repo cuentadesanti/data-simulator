@@ -1,0 +1,331 @@
+{
+  "name": "Reference: Socio-Economic Model (Fixed)",
+  "description": "Complex DAG demonstrating categorical logic, formula lookups, logits (softmax), and tail replacement.\n\nFeatures:\n- Exogenous variables (Region, Age)\n- Conditional distributions (Education | Region)\n- Latent variables (Skill)\n- Softmax logic for categorical selection (Occupation)\n- Lognormal income with semantic offsets\n- Pareto tail replacement for high earners\n\nModel:\nRegion -> Education -> Skill -> Occupation -> Income\n",
+  "dag_definition": {
+    "nodes": [
+      {
+        "id": "region",
+        "name": "region",
+        "kind": "stochastic",
+        "dtype": "string",
+        "scope": "row",
+        "distribution": {
+          "type": "categorical",
+          "params": {
+            "categories": [
+              "North",
+              "Center",
+              "South"
+            ],
+            "probs": [
+              0.3,
+              0.4,
+              0.3
+            ]
+          }
+        }
+      },
+      {
+        "id": "age",
+        "name": "age",
+        "kind": "stochastic",
+        "dtype": "int",
+        "scope": "row",
+        "distribution": {
+          "type": "normal",
+          "params": {
+            "mu": 40,
+            "sigma": 10
+          }
+        },
+        "post_processing": {
+          "clip_min": 18,
+          "clip_max": 65,
+          "round_decimals": 0
+        }
+      },
+      {
+        "id": "education_years",
+        "name": "education_years",
+        "kind": "stochastic",
+        "dtype": "int",
+        "scope": "row",
+        "distribution": {
+          "type": "normal",
+          "params": {
+            "mu": "region_education_mu[region]",
+            "sigma": 2
+          }
+        },
+        "post_processing": {
+          "clip_min": 0,
+          "round_decimals": 0
+        }
+      },
+      {
+        "id": "skill",
+        "name": "skill",
+        "kind": "stochastic",
+        "dtype": "float",
+        "scope": "row",
+        "distribution": {
+          "type": "normal",
+          "params": {
+            "mu": "0.5 * education_years + region_skill_effect[region]",
+            "sigma": 1
+          }
+        }
+      },
+      {
+        "id": "logit_low",
+        "name": "logit_low",
+        "kind": "deterministic",
+        "dtype": "float",
+        "scope": "row",
+        "formula": "-1.5 - 1.0 * skill"
+      },
+      {
+        "id": "logit_mid",
+        "name": "logit_mid",
+        "kind": "deterministic",
+        "dtype": "float",
+        "scope": "row",
+        "formula": "0.0 + 0.5 * skill"
+      },
+      {
+        "id": "logit_high",
+        "name": "logit_high",
+        "kind": "deterministic",
+        "dtype": "float",
+        "scope": "row",
+        "formula": "-0.5 + 1.2 * skill"
+      },
+      {
+        "id": "exp_sum",
+        "name": "exp_sum",
+        "kind": "deterministic",
+        "dtype": "float",
+        "scope": "row",
+        "formula": "exp(logit_low) + exp(logit_mid) + exp(logit_high)"
+      },
+      {
+        "id": "prob_low",
+        "name": "prob_low",
+        "kind": "deterministic",
+        "dtype": "float",
+        "scope": "row",
+        "formula": "exp(logit_low) / exp_sum"
+      },
+      {
+        "id": "prob_mid",
+        "name": "prob_mid",
+        "kind": "deterministic",
+        "dtype": "float",
+        "scope": "row",
+        "formula": "exp(logit_mid) / exp_sum"
+      },
+      {
+        "id": "u_occ",
+        "name": "u_occ",
+        "kind": "stochastic",
+        "dtype": "float",
+        "scope": "row",
+        "distribution": {
+          "type": "uniform",
+          "params": {
+            "low": 0,
+            "high": 1
+          }
+        }
+      },
+      {
+        "id": "occupation",
+        "name": "occupation",
+        "kind": "deterministic",
+        "dtype": "string",
+        "scope": "row",
+        "formula": "if_else(u_occ < prob_low, 'LowSkill', if_else(u_occ < (prob_low + prob_mid), 'MidSkill', 'HighSkill'))"
+      },
+      {
+        "id": "family_income",
+        "name": "family_income",
+        "kind": "stochastic",
+        "dtype": "float",
+        "scope": "row",
+        "distribution": {
+          "type": "lognormal",
+          "params": {
+            "mean": "9.5 + 0.08 * education_years + region_income_shift[region]",
+            "sigma": 0.6
+          }
+        },
+        "post_processing": {
+          "round_decimals": 2
+        }
+      },
+      {
+        "id": "raw_income",
+        "name": "raw_income",
+        "kind": "stochastic",
+        "dtype": "float",
+        "scope": "row",
+        "distribution": {
+          "type": "lognormal",
+          "params": {
+            "mean": "8.8 + 0.35 * skill + occupation_effect[occupation] + 0.25 * log(family_income) + 0.015 * (age - 40)",
+            "sigma": 0.7
+          }
+        }
+      },
+      {
+        "id": "pareto_tail",
+        "name": "pareto_tail",
+        "kind": "stochastic",
+        "dtype": "float",
+        "scope": "row",
+        "distribution": {
+          "type": "scipy.pareto",
+          "params": {
+            "b": 2.5,
+            "scale": 150000
+          }
+        }
+      },
+      {
+        "id": "individual_income",
+        "name": "individual_income",
+        "kind": "deterministic",
+        "dtype": "float",
+        "scope": "row",
+        "formula": "if_else(raw_income > 150000, pareto_tail, raw_income)",
+        "post_processing": {
+          "round_decimals": 2
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "region",
+        "target": "education_years"
+      },
+      {
+        "source": "education_years",
+        "target": "skill"
+      },
+      {
+        "source": "region",
+        "target": "skill"
+      },
+      {
+        "source": "skill",
+        "target": "logit_low"
+      },
+      {
+        "source": "skill",
+        "target": "logit_mid"
+      },
+      {
+        "source": "skill",
+        "target": "logit_high"
+      },
+      {
+        "source": "logit_low",
+        "target": "exp_sum"
+      },
+      {
+        "source": "logit_mid",
+        "target": "exp_sum"
+      },
+      {
+        "source": "logit_high",
+        "target": "exp_sum"
+      },
+      {
+        "source": "logit_low",
+        "target": "prob_low"
+      },
+      {
+        "source": "exp_sum",
+        "target": "prob_low"
+      },
+      {
+        "source": "logit_mid",
+        "target": "prob_mid"
+      },
+      {
+        "source": "exp_sum",
+        "target": "prob_mid"
+      },
+      {
+        "source": "prob_low",
+        "target": "occupation"
+      },
+      {
+        "source": "prob_mid",
+        "target": "occupation"
+      },
+      {
+        "source": "u_occ",
+        "target": "occupation"
+      },
+      {
+        "source": "education_years",
+        "target": "family_income"
+      },
+      {
+        "source": "region",
+        "target": "family_income"
+      },
+      {
+        "source": "age",
+        "target": "raw_income"
+      },
+      {
+        "source": "family_income",
+        "target": "raw_income"
+      },
+      {
+        "source": "skill",
+        "target": "raw_income"
+      },
+      {
+        "source": "occupation",
+        "target": "raw_income"
+      },
+      {
+        "source": "raw_income",
+        "target": "individual_income"
+      },
+      {
+        "source": "pareto_tail",
+        "target": "individual_income"
+      }
+    ],
+    "context": {
+      "region_education_mu": {
+        "North": 14,
+        "Center": 13,
+        "South": 11
+      },
+      "region_skill_effect": {
+        "North": 0.5,
+        "Center": 0.0,
+        "South": -0.5
+      },
+      "region_income_shift": {
+        "North": 0.3,
+        "Center": 0.0,
+        "South": -0.4
+      },
+      "occupation_effect": {
+        "LowSkill": -0.6,
+        "MidSkill": 0.0,
+        "HighSkill": 0.7
+      }
+    },
+    "metadata": {
+      "sample_size": 1000,
+      "seed": 42
+    }
+  }
+}
