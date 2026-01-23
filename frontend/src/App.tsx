@@ -6,11 +6,13 @@ import { MainTabs } from './components/MainTabs';
 import { ToastProvider } from './components/common';
 import { ProjectSidebar } from './components/ProjectSidebar';
 import { useProjectStore, selectHasUnsavedChanges } from './stores/projectStore';
+import { useDAGStore, selectActiveMainTab } from './stores/dagStore';
 
 import '@xyflow/react/dist/style.css';
 
 function App() {
   const hasUnsavedChanges = useProjectStore(selectHasUnsavedChanges);
+  const activeTab = useDAGStore(selectActiveMainTab);
 
   // Warn before leaving with unsaved changes
   useEffect(() => {
@@ -45,10 +47,12 @@ function App() {
               <MainTabs />
             </main>
 
-            {/* Node Editor Panel (right) */}
-            <aside className="w-96 flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto">
-              <NodeEditor />
-            </aside>
+            {/* Node Editor Panel (right) - only show on DAG tab */}
+            {activeTab === 'dag' && (
+              <aside className="w-96 flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto">
+                <NodeEditor />
+              </aside>
+            )}
           </div>
         </div>
       </ReactFlowProvider>

@@ -12,7 +12,7 @@ import type {
   Viewport,
 } from '../types/dag';
 
-type MainTabId = 'dag' | 'data';
+type MainTabId = 'dag' | 'data' | 'pipeline';
 
 interface DAGState {
   // Flow state
