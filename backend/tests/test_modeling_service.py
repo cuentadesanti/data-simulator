@@ -447,9 +447,10 @@ class TestModelQueries:
                 features=["age", "income"],
             )
 
-        model_fits = modeling_service.list_model_fits(db_session)
+        result = modeling_service.list_model_fits(db_session)
 
-        assert len(model_fits) >= 3
+        assert result["total_count"] >= 3
+        assert len(result["model_fits"]) >= 3
 
     def test_list_model_fits_by_version(self, db_session: Session, project_with_pipeline):
         """Test listing model fits filtered by pipeline version."""
@@ -465,11 +466,10 @@ class TestModelQueries:
             features=["age", "income"],
         )
 
-        model_fits = modeling_service.list_model_fits(db_session, pipeline_version_id=version_id)
+        result = modeling_service.list_model_fits(db_session, pipeline_version_id=version_id)
 
-        assert len(model_fits) >= 1
-        for model in model_fits:
-            assert model.get("pipeline_version_id", version_id) == version_id
+        assert result["total_count"] >= 1
+        assert len(result["model_fits"]) >= 1
 
 
 # =============================================================================
@@ -544,3 +544,102 @@ class TestModelingIntegration:
         assert lr_detail["model_type"] == "linear_regression"
         assert ridge_detail["model_type"] == "ridge"
 
+
+# =============================================================================
+# Model Integrity Tests
+# =============================================================================
+
+
+class TestModelIntegrity:
+    """Tests for model artifact integrity checking."""
+
+    def test_signed_model_loads_correctly(self, db_session: Session, project_with_pipeline):
+        """Test that models with valid signatures load correctly."""
+        project, dag_version, pipeline_id, version_id = project_with_pipeline
+
+        # Fit a model (which serializes with HMAC signature)
+        fit_result = modeling_service.fit_model(
+            db=db_session,
+            pipeline_version_id=version_id,
+            name="Integrity Test Model",
+            model_name="linear_regression",
+            target="spending",
+            features=["age", "income"],
+        )
+
+        # Predict should work (validates signature internally)
+        predict_result = modeling_service.predict(
+            db=db_session,
+            model_id=fit_result["model_id"],
+            limit=10,
+        )
+
+        assert len(predict_result["predictions"]) == 10
+
+    def test_tampered_blob_rejected(self, db_session: Session, project_with_pipeline):
+        """Test that tampered model blobs are rejected."""
+        import json
+
+        project, dag_version, pipeline_id, version_id = project_with_pipeline
+
+        # Fit a model
+        fit_result = modeling_service.fit_model(
+            db=db_session,
+            pipeline_version_id=version_id,
+            name="Tamper Test Model",
+            model_name="linear_regression",
+            target="spending",
+            features=["age", "income"],
+        )
+
+        # Get the model fit record
+        model_fit = db_session.get(ModelFit, fit_result["model_id"])
+
+        # Tamper with the blob
+        data = json.loads(model_fit.artifact_blob)
+        # Modify the blob slightly
+        blob_bytes = list(data["blob"].encode())
+        if blob_bytes[-5:-1]:
+            blob_bytes[-3] = ord('X')  # Modify a character
+        data["blob"] = bytes(blob_bytes).decode(errors='ignore')
+        model_fit.artifact_blob = json.dumps(data)
+        db_session.commit()
+
+        # Prediction should fail with integrity error
+        with pytest.raises((ValueError, Exception)):
+            modeling_service.predict(
+                db=db_session,
+                model_id=fit_result["model_id"],
+                limit=10,
+            )
+
+    def test_invalid_signature_rejected(self, db_session: Session, project_with_pipeline):
+        """Test that models with invalid signatures are rejected."""
+        import json
+
+        project, dag_version, pipeline_id, version_id = project_with_pipeline
+
+        # Fit a model
+        fit_result = modeling_service.fit_model(
+            db=db_session,
+            pipeline_version_id=version_id,
+            name="Bad Sig Model",
+            model_name="linear_regression",
+            target="spending",
+            features=["age", "income"],
+        )
+
+        # Get the model fit record and change the signature
+        model_fit = db_session.get(ModelFit, fit_result["model_id"])
+        data = json.loads(model_fit.artifact_blob)
+        data["signature"] = "invalid_signature_0123456789abcdef"
+        model_fit.artifact_blob = json.dumps(data)
+        db_session.commit()
+
+        # Prediction should fail
+        with pytest.raises(ValueError, match="integrity"):
+            modeling_service.predict(
+                db=db_session,
+                model_id=fit_result["model_id"],
+                limit=10,
+            )

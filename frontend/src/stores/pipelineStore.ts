@@ -191,21 +191,10 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
                     state.previewRows = result.preview_rows;
                     state.lastWarnings = result.warnings;
                     state.isApplyingStep = false;
-
-                    // Update steps - reload pipeline details for full step list
-                    // For now, we append a placeholder step
-                    state.steps = [
-                        ...state.steps,
-                        {
-                            step_id: `step_${Date.now()}`,
-                            type: stepType,
-                            output_column: outputColumn,
-                            params,
-                            order: state.steps.length + 1,
-                            created_at: new Date().toISOString(),
-                        },
-                    ];
                 });
+
+                // Reload pipeline to get authoritative step list from server
+                await get().loadPipeline(currentPipelineId);
 
                 return result;
             } catch (error) {

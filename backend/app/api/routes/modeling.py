@@ -125,6 +125,7 @@ class ModelFitsListResponse(BaseModel):
     """Response schema for listing model fits."""
     
     model_fits: list[ModelFitSummary]
+    total_count: int = Field(..., description="Total number of model fits matching the filter")
 
 
 # =============================================================================
@@ -214,15 +215,18 @@ def list_models() -> ModelsListResponse:
 @router.get("/fits", response_model=ModelFitsListResponse)
 def list_model_fits(
     pipeline_version_id: str | None = Query(None, description="Filter by pipeline version"),
+    limit: int = Query(50, ge=1, le=200, description="Maximum results to return"),
+    offset: int = Query(0, ge=0, description="Number of results to skip"),
     db: Session = Depends(get_db),
 ) -> ModelFitsListResponse:
-    """List model fits.
+    """List model fits with pagination.
     
-    Optionally filter by pipeline version.
+    Optionally filter by pipeline version. Supports pagination via limit/offset.
     """
-    model_fits = modeling_service.list_model_fits(db, pipeline_version_id)
+    result = modeling_service.list_model_fits(db, pipeline_version_id, limit, offset)
     return ModelFitsListResponse(
-        model_fits=[ModelFitSummary(**m) for m in model_fits]
+        model_fits=[ModelFitSummary(**m) for m in result["model_fits"]],
+        total_count=result["total_count"],
     )
 
 

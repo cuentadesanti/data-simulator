@@ -7,7 +7,11 @@ storing fitted model artifacts, and generating predictions.
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
+import json
 import logging
+import os
 import pickle
 from typing import Any
 
@@ -21,6 +25,63 @@ from app.services.model_registry import get_model_registry
 from app.services.pipeline_service import _materialize_to_df
 
 logger = logging.getLogger(__name__)
+
+# Secret key for HMAC signing - in production, use environment variable
+_MODEL_SECRET_KEY = os.environ.get("MODEL_SECRET_KEY", "dev-secret-key-change-in-production").encode()
+
+
+# =============================================================================
+# Model Serialization with Integrity Checking
+# =============================================================================
+
+
+def _serialize_model(model: Any) -> str:
+    """Serialize a model with HMAC signature for integrity checking.
+    
+    Args:
+        model: The sklearn model to serialize
+        
+    Returns:
+        JSON string with base64-encoded blob and HMAC signature
+    """
+    blob = pickle.dumps(model)
+    blob_b64 = base64.b64encode(blob).decode("utf-8")
+    signature = hmac.new(_MODEL_SECRET_KEY, blob, hashlib.sha256).hexdigest()
+    
+    return json.dumps({"blob": blob_b64, "signature": signature})
+
+
+def _deserialize_model(artifact_blob: str) -> Any:
+    """Deserialize a model with HMAC signature verification.
+    
+    Args:
+        artifact_blob: JSON string with blob and signature
+        
+    Returns:
+        The deserialized sklearn model
+        
+    Raises:
+        ValueError: If signature verification fails or blob is tampered
+    """
+    try:
+        data = json.loads(artifact_blob)
+    except json.JSONDecodeError:
+        # Legacy format: plain base64 blob without signature
+        logger.warning("Loading legacy model without integrity check")
+        return pickle.loads(base64.b64decode(artifact_blob))
+    
+    if "blob" not in data or "signature" not in data:
+        # Legacy format
+        logger.warning("Loading legacy model without integrity check")
+        return pickle.loads(base64.b64decode(artifact_blob))
+    
+    blob = base64.b64decode(data["blob"])
+    expected_sig = hmac.new(_MODEL_SECRET_KEY, blob, hashlib.sha256).hexdigest()
+    
+    if not hmac.compare_digest(data["signature"], expected_sig):
+        raise ValueError("Model integrity check failed: signature mismatch")
+    
+    return pickle.loads(blob)
 
 
 # =============================================================================
@@ -161,8 +222,8 @@ def fit_model(
     # Get diagnostics
     diagnostics = model_type.diagnostics(model, X_test, y_test)
     
-    # Serialize model to base64 pickle for storage
-    artifact_blob = base64.b64encode(pickle.dumps(model)).decode("utf-8")
+    # Serialize model with integrity signature
+    artifact_blob = _serialize_model(model)
     
     # Create ModelFit record
     model_fit = ModelFit(
@@ -248,8 +309,8 @@ def predict(
     
     X = feature_df[valid_mask].values
     
-    # Load the model
-    model = pickle.loads(base64.b64decode(model_fit.artifact_blob))
+    # Load the model with integrity verification
+    model = _deserialize_model(model_fit.artifact_blob)
     
     # Get model type for prediction
     registry = get_model_registry()
@@ -310,34 +371,49 @@ def get_model_fit(db: Session, model_id: str) -> dict[str, Any] | None:
 
 def list_model_fits(
     db: Session, 
-    pipeline_version_id: str | None = None
-) -> list[dict[str, Any]]:
-    """List model fits.
+    pipeline_version_id: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """List model fits with pagination.
     
     Args:
         db: Database session
         pipeline_version_id: Optional filter by pipeline version
+        limit: Maximum number of results (default 50, max 200)
+        offset: Number of results to skip for pagination
         
     Returns:
-        List of model fit summaries
+        Dict with total_count and model_fits list
     """
-    from sqlalchemy import select
+    from sqlalchemy import func, select
     
-    stmt = select(ModelFit)
+    # Count query
+    count_stmt = select(func.count()).select_from(ModelFit)
+    if pipeline_version_id:
+        count_stmt = count_stmt.where(ModelFit.pipeline_version_id == pipeline_version_id)
+    total_count = db.execute(count_stmt).scalar() or 0
+    
+    # Data query with pagination
+    stmt = select(ModelFit).order_by(ModelFit.created_at.desc())
     if pipeline_version_id:
         stmt = stmt.where(ModelFit.pipeline_version_id == pipeline_version_id)
+    stmt = stmt.offset(offset).limit(limit)
     
     model_fits = db.execute(stmt).scalars().all()
     
-    return [
-        {
-            "id": m.id,
-            "name": m.name,
-            "model_type": m.model_type,
-            "task_type": m.task_type,
-            "target_column": m.target_column,
-            "metrics": m.metrics,
-            "created_at": m.created_at.isoformat(),
-        }
-        for m in model_fits
-    ]
+    return {
+        "total_count": total_count,
+        "model_fits": [
+            {
+                "id": m.id,
+                "name": m.name,
+                "model_type": m.model_type,
+                "task_type": m.task_type,
+                "target_column": m.target_column,
+                "metrics": m.metrics,
+                "created_at": m.created_at.isoformat(),
+            }
+            for m in model_fits
+        ]
+    }

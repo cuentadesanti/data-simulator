@@ -210,6 +210,7 @@ class ModelFit(Base):
     __tablename__ = "model_fits"
     __table_args__ = (
         Index("ix_model_fits_pipeline_version_id", "pipeline_version_id"),
+        Index("ix_model_fits_model_type", "model_type"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)

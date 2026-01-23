@@ -46,6 +46,7 @@ export const ModelsPanel = () => {
     const [fitResult, setFitResult] = useState<FitResponse | null>(null);
     const [fitError, setFitError] = useState<string | null>(null);
 
+
     // Load model types on mount
     useEffect(() => {
         const loadModelTypes = async () => {
@@ -61,6 +62,20 @@ export const ModelsPanel = () => {
         };
         loadModelTypes();
     }, []);
+
+    // Refresh fitted models when needed
+    const refreshFits = async () => {
+        if (!currentVersionId) return;
+        try {
+            await modelingApi.listFits(currentVersionId);
+        } catch (error) {
+            console.error('Failed to refresh fitted models:', error);
+        }
+    };
+
+    useEffect(() => {
+        refreshFits();
+    }, [currentVersionId]);
 
     // Reset parameters when model changes
     useEffect(() => {
@@ -155,12 +170,14 @@ export const ModelsPanel = () => {
             });
 
             setFitResult(result);
+            refreshFits(); // Refresh the fitted models list
         } catch (error) {
             setFitError(error instanceof Error ? error.message : 'Failed to fit model');
         } finally {
             setIsFitting(false);
         }
     };
+
 
     if (!currentVersionId) {
         return (

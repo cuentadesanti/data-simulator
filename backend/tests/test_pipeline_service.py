@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db.database import Base
 from app.db.models import DAGVersion, Pipeline, PipelineVersion, Project
 from app.services.hashing import canonical_json_dumps, fingerprint_source, hash_steps
-from app.services.pipeline_service import add_step, create_pipeline, materialize
+from app.services.pipeline_service import add_step, create_pipeline, materialize, resimulate
 from app.services.transform_registry import get_transform_registry, validate_safe_expression
 
 
@@ -382,3 +382,139 @@ class TestPipelineService:
 
         assert v1.source_fingerprint == v2.source_fingerprint
         assert v1.steps_hash == v2.steps_hash
+
+
+# =============================================================================
+# Resimulate Tests
+# =============================================================================
+
+
+class TestResimulate:
+    """Tests for resimulate functionality."""
+
+    def test_resimulate_creates_new_pipeline(self, db_session: Session, project_with_dag):
+        """Test that resimulate creates a new pipeline."""
+        project, dag_version = project_with_dag
+
+        # Create original pipeline
+        created = create_pipeline(
+            db=db_session,
+            project_id=project.id,
+            name="Original Pipeline",
+            source_type="simulation",
+            dag_version_id=dag_version.id,
+            seed=42,
+            sample_size=100,
+        )
+
+        # Resimulate with different seed
+        result = resimulate(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=created["version_id"],
+            seed=123,
+            sample_size=100,
+        )
+
+        assert "new_pipeline_id" in result
+        assert "version_id" in result
+        assert result["new_pipeline_id"] != created["pipeline_id"]
+
+        # Verify new pipeline exists
+        new_pipeline = db_session.get(Pipeline, result["new_pipeline_id"])
+        assert new_pipeline is not None
+        assert "(resimulated)" in new_pipeline.name
+
+    def test_resimulate_copies_steps(self, db_session: Session, project_with_dag):
+        """Test that resimulate copies steps from source version."""
+        project, dag_version = project_with_dag
+
+        # Create pipeline and add a step
+        created = create_pipeline(
+            db=db_session,
+            project_id=project.id,
+            name="Original Pipeline",
+            source_type="simulation",
+            dag_version_id=dag_version.id,
+            seed=42,
+            sample_size=100,
+        )
+
+        step_result = add_step(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=created["version_id"],
+            step_spec={
+                "type": "formula",
+                "output_column": "double_income",
+                "params": {"expression": "income * 2"},
+            },
+        )
+
+        # Resimulate from version with step
+        result = resimulate(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=step_result["new_version_id"],
+            seed=123,
+            sample_size=100,
+        )
+
+        # Verify steps were copied
+        new_version = db_session.get(PipelineVersion, result["version_id"])
+        assert new_version is not None
+        assert len(new_version.steps) == 1
+        assert new_version.steps[0]["output_column"] == "double_income"
+
+    def test_resimulate_different_seed_changes_fingerprint(self, db_session: Session, project_with_dag):
+        """Test that different seed produces different source fingerprint."""
+        project, dag_version = project_with_dag
+
+        created = create_pipeline(
+            db=db_session,
+            project_id=project.id,
+            name="Original Pipeline",
+            source_type="simulation",
+            dag_version_id=dag_version.id,
+            seed=42,
+            sample_size=100,
+        )
+
+        result = resimulate(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=created["version_id"],
+            seed=999,  # Different seed
+            sample_size=100,
+        )
+
+        original_version = db_session.get(PipelineVersion, created["version_id"])
+        new_version = db_session.get(PipelineVersion, result["version_id"])
+
+        # Different seed should produce different fingerprint
+        assert original_version.source_fingerprint != new_version.source_fingerprint
+        # But same steps hash (same empty steps)
+        assert original_version.steps_hash == new_version.steps_hash
+
+    def test_resimulate_invalid_version_raises(self, db_session: Session, project_with_dag):
+        """Test that resimulate with invalid version raises error."""
+        project, dag_version = project_with_dag
+
+        created = create_pipeline(
+            db=db_session,
+            project_id=project.id,
+            name="Original Pipeline",
+            source_type="simulation",
+            dag_version_id=dag_version.id,
+            seed=42,
+            sample_size=100,
+        )
+
+        with pytest.raises(ValueError, match="not found"):
+            resimulate(
+                db=db_session,
+                pipeline_id=created["pipeline_id"],
+                version_id="invalid-version-id",
+                seed=123,
+                sample_size=100,
+            )
