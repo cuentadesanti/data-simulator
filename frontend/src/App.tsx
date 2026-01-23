@@ -5,6 +5,7 @@ import { Toolbar } from './components/Toolbar';
 import { MainTabs } from './components/MainTabs';
 import { ToastProvider } from './components/common';
 import { ProjectSidebar } from './components/ProjectSidebar';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useProjectStore, selectHasUnsavedChanges } from './stores/projectStore';
 import { useDAGStore, selectActiveMainTab } from './stores/dagStore';
 
@@ -34,23 +35,31 @@ function App() {
         <div className="h-screen w-full flex flex-col bg-gray-50">
           {/* Top Toolbar */}
           <header className="flex-shrink-0 border-b border-gray-200 bg-white">
-            <Toolbar />
+            <ErrorBoundary name="Toolbar">
+              <Toolbar />
+            </ErrorBoundary>
           </header>
 
           {/* Main Content Area */}
           <div className="flex-1 flex overflow-hidden">
             {/* Project Sidebar (left) */}
-            <ProjectSidebar />
+            <ErrorBoundary name="Project Sidebar">
+              <ProjectSidebar />
+            </ErrorBoundary>
 
             {/* Main Content with Tabs (DAG Canvas / Data Preview) */}
             <main className="flex-1 flex flex-col overflow-hidden">
-              <MainTabs />
+              <ErrorBoundary name="Main Content">
+                <MainTabs />
+              </ErrorBoundary>
             </main>
 
             {/* Node Editor Panel (right) - only show on DAG tab */}
             {activeTab === 'dag' && (
               <aside className="w-96 flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto">
-                <NodeEditor />
+                <ErrorBoundary name="Node Editor">
+                  <NodeEditor />
+                </ErrorBoundary>
               </aside>
             )}
           </div>
@@ -61,3 +70,4 @@ function App() {
 }
 
 export default App;
+
