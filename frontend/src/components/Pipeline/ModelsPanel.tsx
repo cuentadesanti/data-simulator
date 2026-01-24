@@ -15,7 +15,7 @@ import {
     Settings,
     AlertCircle,
 } from 'lucide-react';
-import { modelingApi, type ModelTypeInfo, type FitResponse, type ModelParamValue, type ModelParameter } from '../../api/modelingApi';
+import { modelingApi, type ModelTypeInfo, type FitResponse, type ModelParamValue, type ModelParameter, type ModelFitSummary } from '../../api/modelingApi';
 import {
     usePipelineStore,
     selectPipelineSchema,
@@ -45,6 +45,7 @@ export const ModelsPanel = () => {
     const [isFitting, setIsFitting] = useState(false);
     const [fitResult, setFitResult] = useState<FitResponse | null>(null);
     const [fitError, setFitError] = useState<string | null>(null);
+    const [fittedModels, setFittedModels] = useState<ModelFitSummary[]>([]);
 
 
     // Load model types on mount
@@ -67,7 +68,8 @@ export const ModelsPanel = () => {
     const refreshFits = useCallback(async () => {
         if (!currentVersionId) return;
         try {
-            await modelingApi.listFits(currentVersionId);
+            const fits = await modelingApi.listFits(currentVersionId);
+            setFittedModels(fits);
         } catch (error) {
             console.error('Failed to refresh fitted models:', error);
         }
@@ -526,6 +528,48 @@ export const ModelsPanel = () => {
                                 </div>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* Fitted Models List */}
+                {fittedModels.length > 0 && (
+                    <div className="pt-4 border-t border-gray-100">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                            <BarChart3 size={12} />
+                            Fitted Models ({fittedModels.length})
+                        </div>
+                        <div className="space-y-2">
+                            {fittedModels.map((model) => (
+                                <div
+                                    key={model.id}
+                                    className="p-2 border border-gray-200 rounded-md hover:border-purple-300 hover:bg-purple-50 transition-colors group"
+                                >
+                                    <div className="flex justify-between items-start mb-1">
+                                        <div className="text-sm font-medium text-gray-800 truncate pr-2">
+                                            {model.name}
+                                        </div>
+                                        <div className="text-[10px] text-gray-400 whitespace-nowrap">
+                                            {new Date(model.created_at).toLocaleDateString()}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                                        <span className="bg-gray-100 px-1 rounded">{model.model_type}</span>
+                                        <span>•</span>
+                                        <span>Target: <span className="text-gray-700">{model.target_column}</span></span>
+                                    </div>
+                                    <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1">
+                                        {Object.entries(model.metrics).map(([key, value]) => (
+                                            <div key={key} className="flex justify-between text-[10px]">
+                                                <span className="text-gray-400 capitalize">{key}:</span>
+                                                <span className="font-mono font-medium text-gray-600">
+                                                    {value.toFixed(3)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>
