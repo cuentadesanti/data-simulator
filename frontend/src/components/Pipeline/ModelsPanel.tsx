@@ -15,7 +15,7 @@ import {
     Settings,
     AlertCircle,
 } from 'lucide-react';
-import { modelingApi, type ModelTypeInfo, type FitResponse, type ModelParamValue, type ModelParameter, type ModelFitSummary } from '../../api/modelingApi';
+import { modelingApi, ModelingAPIError, type ModelTypeInfo, type FitResponse, type ModelParamValue, type ModelParameter, type ModelFitSummary, type ModelingError } from '../../api/modelingApi';
 import {
     usePipelineStore,
     selectPipelineSchema,
@@ -44,7 +44,7 @@ export const ModelsPanel = () => {
     // Fit results
     const [isFitting, setIsFitting] = useState(false);
     const [fitResult, setFitResult] = useState<FitResponse | null>(null);
-    const [fitError, setFitError] = useState<string | null>(null);
+    const [fitErrors, setFitErrors] = useState<ModelingError[]>([]);
     const [fittedModels, setFittedModels] = useState<ModelFitSummary[]>([]);
 
 
@@ -131,29 +131,43 @@ export const ModelsPanel = () => {
 
     const handleFit = async () => {
         if (!currentVersionId) {
-            setFitError('No active pipeline version');
+            setFitErrors([{ code: 'VALIDATION_ERROR', message: 'No active pipeline version' }]);
             return;
         }
 
         if (!targetColumn) {
-            setFitError('Please select a target column');
+            setFitErrors([{
+                code: 'MISSING_TARGET',
+                message: 'Please select a target column',
+                field: 'target',
+                suggestion: 'Choose a numeric column to predict',
+            }]);
             return;
         }
 
         if (selectedFeatures.length === 0) {
-            setFitError('Please select at least one feature');
+            setFitErrors([{
+                code: 'INVALID_FEATURES',
+                message: 'Please select at least one feature',
+                field: 'features',
+                suggestion: 'Select one or more numeric columns as input features',
+            }]);
             return;
         }
 
         // Check if there are any parameter errors
         const hasErrors = Object.values(paramErrors).some(err => !!err);
         if (hasErrors) {
-            setFitError('Please fix hyperparameter errors before fitting');
+            setFitErrors([{
+                code: 'VALIDATION_ERROR',
+                message: 'Please fix hyperparameter errors before fitting',
+                suggestion: 'Check the highlighted parameters above',
+            }]);
             return;
         }
 
         setIsFitting(true);
-        setFitError(null);
+        setFitErrors([]);
         setFitResult(null);
 
         try {
@@ -174,7 +188,14 @@ export const ModelsPanel = () => {
             setFitResult(result);
             refreshFits(); // Refresh the fitted models list
         } catch (error) {
-            setFitError(error instanceof Error ? error.message : 'Failed to fit model');
+            if (error instanceof ModelingAPIError) {
+                setFitErrors(error.errors);
+            } else {
+                setFitErrors([{
+                    code: 'VALIDATION_ERROR',
+                    message: error instanceof Error ? error.message : 'Failed to fit model',
+                }]);
+            }
         } finally {
             setIsFitting(false);
         }
@@ -478,10 +499,29 @@ export const ModelsPanel = () => {
                 </button>
 
 
-                {/* Error */}
-                {fitError && (
-                    <div className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-md p-2">
-                        {fitError}
+                {/* Errors */}
+                {fitErrors.length > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded-md p-3 space-y-2">
+                        {fitErrors.map((error, idx) => (
+                            <div key={idx} className="text-sm">
+                                <div className="flex items-start gap-2">
+                                    <AlertCircle size={14} className="text-red-500 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                        <div className="text-red-700 font-medium">{error.message}</div>
+                                        {error.suggestion && (
+                                            <div className="text-red-600 text-xs mt-1">
+                                                💡 {error.suggestion}
+                                            </div>
+                                        )}
+                                        {error.field && (
+                                            <div className="text-red-500 text-xs mt-1 font-mono">
+                                                Field: {error.field}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
 

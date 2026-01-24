@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,109 @@ from app.services import modeling_service
 from app.services.model_registry import get_model_registry
 
 router = APIRouter()
+
+
+# =============================================================================
+# Error Schemas
+# =============================================================================
+
+ModelingErrorCode = Literal[
+    "PIPELINE_NOT_FOUND",
+    "MODEL_NOT_FOUND",
+    "UNKNOWN_MODEL_TYPE",
+    "MISSING_TARGET",
+    "INVALID_TARGET",
+    "INVALID_FEATURES",
+    "NO_VALID_ROWS",
+    "INTEGRITY_ERROR",
+    "VALIDATION_ERROR",
+]
+
+
+class ModelingError(BaseModel):
+    """Structured error for modeling operations."""
+
+    code: ModelingErrorCode = Field(..., description="Machine-readable error code")
+    message: str = Field(..., description="Human-readable error message")
+    field: str | None = Field(None, description="Field that caused the error (if applicable)")
+    suggestion: str | None = Field(None, description="Suggestion for fixing the error")
+    context: dict[str, Any] | None = Field(None, description="Additional context")
+
+
+class ModelingErrorResponse(BaseModel):
+    """Error response with structured errors."""
+
+    success: Literal[False] = False
+    errors: list[ModelingError] = Field(..., description="List of structured errors")
+
+
+def _parse_modeling_error(error: ValueError) -> ModelingError:
+    """Parse a ValueError into a structured ModelingError."""
+    msg = str(error)
+
+    if "not found" in msg.lower():
+        if "pipeline version" in msg.lower():
+            return ModelingError(
+                code="PIPELINE_NOT_FOUND",
+                message=msg,
+                suggestion="Ensure the pipeline exists and has materialized data",
+            )
+        elif "model" in msg.lower() and "type" not in msg.lower():
+            return ModelingError(
+                code="MODEL_NOT_FOUND",
+                message=msg,
+                suggestion="Check that the model ID is correct",
+            )
+        elif "target column" in msg.lower():
+            return ModelingError(
+                code="INVALID_TARGET",
+                message=msg,
+                field="target",
+                suggestion="Select a valid numeric column as the target",
+            )
+        elif "feature" in msg.lower():
+            return ModelingError(
+                code="INVALID_FEATURES",
+                message=msg,
+                field="features",
+                suggestion="Ensure all selected features exist in the pipeline schema",
+            )
+
+    if "unknown model type" in msg.lower():
+        return ModelingError(
+            code="UNKNOWN_MODEL_TYPE",
+            message=msg,
+            field="model_name",
+            suggestion="Select a valid model type from the available options",
+        )
+
+    if "target column is required" in msg.lower():
+        return ModelingError(
+            code="MISSING_TARGET",
+            message=msg,
+            field="target",
+            suggestion="Select a target column for regression",
+        )
+
+    if "no valid rows" in msg.lower():
+        return ModelingError(
+            code="NO_VALID_ROWS",
+            message=msg,
+            suggestion="Check for null values in your data or adjust feature selection",
+        )
+
+    if "integrity" in msg.lower() or "signature" in msg.lower():
+        return ModelingError(
+            code="INTEGRITY_ERROR",
+            message=msg,
+            suggestion="The model data may be corrupted. Try re-fitting the model.",
+        )
+
+    # Default fallback
+    return ModelingError(
+        code="VALIDATION_ERROR",
+        message=msg,
+    )
 
 
 # =============================================================================
@@ -133,15 +237,21 @@ class ModelFitsListResponse(BaseModel):
 # =============================================================================
 
 
-@router.post("/fit", response_model=FitResponse)
+@router.post(
+    "/fit",
+    response_model=FitResponse,
+    responses={400: {"model": ModelingErrorResponse}},
+)
 def fit_model(
     request: FitRequest,
     db: Session = Depends(get_db),
-) -> FitResponse:
+) -> FitResponse | JSONResponse:
     """Fit a model on pipeline data.
-    
+
     Trains the specified model type on the given pipeline version,
     computing train/test metrics and storing the fitted model.
+
+    Returns structured errors on failure with field-specific suggestions.
     """
     try:
         result = modeling_service.fit_model(
@@ -161,17 +271,27 @@ def fit_model(
             diagnostics=result["diagnostics"],
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        error = _parse_modeling_error(e)
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"success": False, "errors": [error.model_dump(exclude_none=True)]},
+        )
 
 
-@router.post("/predict", response_model=PredictResponse)
+@router.post(
+    "/predict",
+    response_model=PredictResponse,
+    responses={400: {"model": ModelingErrorResponse}},
+)
 def predict(
     request: PredictRequest,
     db: Session = Depends(get_db),
-) -> PredictResponse:
+) -> PredictResponse | JSONResponse:
     """Generate predictions using a fitted model.
-    
+
     Applies the fitted model to the pipeline data to generate predictions.
+
+    Returns structured errors on failure with suggestions.
     """
     try:
         result = modeling_service.predict(
@@ -185,7 +305,11 @@ def predict(
             preview_rows_with_pred=result["preview_rows_with_pred"],
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        error = _parse_modeling_error(e)
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"success": False, "errors": [error.model_dump(exclude_none=True)]},
+        )
 
 
 @router.get("/models", response_model=ModelsListResponse)
