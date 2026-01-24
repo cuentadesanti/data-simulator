@@ -44,12 +44,12 @@ async def data_simulator_error_handler(request: Request, exc: DataSimulatorError
     )
 
 
-# Include routers with optional authentication (commented out for now to avoid breaking existing workflow if keys are missing)
-# To enable strict auth, uncomment dependencies=[Depends(require_auth)]
-# For the purpose of "Simplest" demo, we will protect the DAG and Projects routes.
+# Include routers
+# Public routes
+app.include_router(dag.router, prefix="/api/dag", tags=["DAG"])
+app.include_router(distributions.router, prefix="/api/distributions", tags=["Distributions"])
 
-app.include_router(dag.router, prefix="/api/dag", tags=["DAG"], dependencies=[Depends(require_auth)])
-app.include_router(distributions.router, prefix="/api/distributions", tags=["Distributions"], dependencies=[Depends(require_auth)])
+# Protected routes (require auth)
 app.include_router(projects.router, prefix="/api/projects", tags=["Projects"], dependencies=[Depends(require_auth)])
 app.include_router(pipelines.router, prefix="/api/pipelines", tags=["Pipelines"], dependencies=[Depends(require_auth)])
 app.include_router(transforms.router, prefix="/api/transforms", tags=["Transforms"], dependencies=[Depends(require_auth)])

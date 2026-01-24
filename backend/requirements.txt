@@ -32,4 +32,6 @@ ruff>=0.2.0
 mypy>=1.8.0
 
 # Auth
-clerk-backend-api>=1.0.0
+clerk-backend-api>=4.2.0
+PyJWT[crypto]>=2.8.0
+cryptography>=42.0.0

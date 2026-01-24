@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from pydantic_settings import BaseSettings
 
-
-import os
-
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -14,7 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "Data Simulator"
     debug: bool = False
     environment: str = "dev"  # dev, staging, prod
-    clerk_secret_key: str = os.environ.get("CLERK_SECRET_KEY", "")
+    clerk_secret_key: str = ""
 
     # Generation limits
     max_rows_hard: int = 10_000_000
