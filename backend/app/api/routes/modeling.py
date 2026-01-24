@@ -168,15 +168,11 @@ class PredictResponse(BaseModel):
     preview_rows_with_pred: list[dict[str, Any]]
 
 
-class ModelParameter(BaseModel):
-    """Parameter definition for a model type."""
+class ModelVideoLink(BaseModel):
+    """Link to a learning resource for a model."""
     
-    name: str
-    display_name: str
-    type: str
-    required: bool
-    default: Any | None
-    description: str
+    title: str
+    url: str
 
 
 class ModelTypeInfo(BaseModel):
@@ -187,6 +183,12 @@ class ModelTypeInfo(BaseModel):
     description: str
     task_type: str
     parameters: list[ModelParameter]
+    # UI metadata
+    icon: str | None = None
+    complexity: int | None = None
+    coming_soon: bool = False
+    tags: list[str] = Field(default_factory=list)
+    video_links: list[ModelVideoLink] = Field(default_factory=list)
 
 
 class ModelsListResponse(BaseModel):
@@ -329,6 +331,10 @@ def list_models() -> ModelsListResponse:
             description=m["description"],
             task_type=m["task_type"],
             parameters=[ModelParameter(**p) for p in m["parameters"]],
+            icon=m.get("icon"),
+            complexity=m.get("complexity"),
+            tags=m.get("tags", []),
+            video_links=[ModelVideoLink(**v) for v in m.get("video_links", [])],
         )
         for m in models_data
     ]

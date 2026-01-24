@@ -534,6 +534,254 @@ class SklearnModelType(ModelType):
 # =============================================================================
 
 
+# =============================================================================
+# Model Metadata (Display, Learning Resources, Complexity)
+# =============================================================================
+
+@dataclass
+class ModelMetadata:
+    """Additional metadata for model display and learning resources."""
+
+    icon: str = "brain"  # lucide icon name
+    complexity: int = 50  # 1-100, lower = simpler
+    video_links: list[dict[str, str]] = field(default_factory=list)
+    coming_soon: bool = False
+    tags: list[str] = field(default_factory=list)
+
+
+# StatQuest video links organized by model
+MODEL_METADATA: dict[str, ModelMetadata] = {
+    # === Linear Models (Simplest) ===
+    "linear_regression": ModelMetadata(
+        icon="trending-up",
+        complexity=10,
+        tags=["beginner", "interpretable", "fast"],
+        video_links=[
+            {"title": "Linear Regression, Clearly Explained", "url": "https://youtube.com/watch?v=nk2CQITm_eo"},
+            {"title": "Fitting a Line to Data", "url": "https://youtube.com/watch?v=PaFPbb66DxQ"},
+            {"title": "Multiple Regression", "url": "https://youtube.com/watch?v=zITIFTsivN8"},
+            {"title": "Polynomial Regression", "url": "https://youtube.com/watch?v=QptI-vDle8Y"},
+        ],
+    ),
+    "ridge": ModelMetadata(
+        icon="shield",
+        complexity=20,
+        tags=["regularization", "interpretable"],
+        video_links=[
+            {"title": "Ridge Regression, Clearly Explained", "url": "https://youtube.com/watch?v=Q81RR3yKn30"},
+        ],
+    ),
+    "lasso": ModelMetadata(
+        icon="scissors",
+        complexity=20,
+        tags=["regularization", "feature-selection"],
+        video_links=[
+            {"title": "Lasso Regression, Clearly Explained", "url": "https://youtube.com/watch?v=NGf0voTMlcs"},
+        ],
+    ),
+    "elastic_net": ModelMetadata(
+        icon="git-merge",
+        complexity=25,
+        tags=["regularization", "feature-selection"],
+        video_links=[
+            {"title": "Elastic Net Regression", "url": "https://youtube.com/watch?v=1dKRdX9bfIo"},
+        ],
+    ),
+
+    # === Tree-Based Models ===
+    "polynomial_regression": ModelMetadata(
+        icon="trending-up",
+        complexity=25,
+        coming_soon=True,
+        tags=["linear", "non-linear-features"],
+        video_links=[
+            {"title": "Polynomial Regression", "url": "https://youtube.com/watch?v=QptI-vDle8Y"},
+        ],
+    ),
+    "decision_tree_regressor": ModelMetadata(
+        icon="git-branch",
+        complexity=30,
+        tags=["interpretable", "non-linear"],
+        video_links=[
+            {"title": "Decision Trees", "url": "https://youtube.com/watch?v=7VeUPuFGJHk"},
+            {"title": "Feature Selection and Missing Data", "url": "https://youtube.com/watch?v=wpNl-JwwplA"},
+            {"title": "Regression Trees", "url": "https://youtube.com/watch?v=g9c66TUylZ4"},
+            {"title": "How to Prune Regression Trees", "url": "https://youtube.com/watch?v=D0efHEJsfHo"},
+        ],
+    ),
+    "random_forest_regressor": ModelMetadata(
+        icon="trees",
+        complexity=40,
+        tags=["ensemble", "robust"],
+        video_links=[
+            {"title": "Random Forests Part 1", "url": "https://youtube.com/watch?v=J4Wdy0Wc_xQ"},
+            {"title": "Random Forests Part 2 - Missing Data", "url": "https://youtube.com/watch?v=sQ870ber3wc"},
+        ],
+    ),
+    "extra_trees_regressor": ModelMetadata(
+        icon="trees",
+        complexity=40,
+        tags=["ensemble", "fast"],
+        video_links=[],
+    ),
+
+    # === Boosting Models ===
+    "ada_boost_regressor": ModelMetadata(
+        icon="zap",
+        complexity=50,
+        tags=["ensemble", "boosting"],
+        video_links=[
+            {"title": "AdaBoost, Clearly Explained", "url": "https://youtube.com/watch?v=LsK-xG1cLYA"},
+        ],
+    ),
+    "gradient_boosting_regressor": ModelMetadata(
+        icon="flame",
+        complexity=55,
+        tags=["ensemble", "boosting", "powerful"],
+        video_links=[
+            {"title": "Gradient Boost Part 1 - Regression Main Ideas", "url": "https://youtube.com/watch?v=3CC4N4z3GJc"},
+            {"title": "Gradient Boost Part 2 - Regression Details", "url": "https://youtube.com/watch?v=2xudPOBz-vs"},
+            {"title": "Gradient Boost Part 3 - Classification", "url": "https://youtube.com/watch?v=jxuNLH5dXCs"},
+            {"title": "Gradient Boost Part 4 - Classification Details", "url": "https://youtube.com/watch?v=StWY5QWMXCw"},
+        ],
+    ),
+    "hist_gradient_boosting_regressor": ModelMetadata(
+        icon="flame",
+        complexity=55,
+        tags=["ensemble", "boosting", "fast", "large-data"],
+        video_links=[
+            {"title": "Gradient Boost Part 1 - Main Ideas", "url": "https://youtube.com/watch?v=3CC4N4z3GJc"},
+        ],
+    ),
+    "xgboost_regressor": ModelMetadata(
+        icon="zap",
+        complexity=60,
+        coming_soon=True,
+        tags=["ensemble", "boosting", "state-of-the-art"],
+        video_links=[
+            {"title": "XGBoost Part 1 - Regression", "url": "https://youtube.com/watch?v=OtD8wVaFm6E"},
+            {"title": "XGBoost Part 2 - Classification", "url": "https://youtube.com/watch?v=8b1JEDvenQU"},
+            {"title": "XGBoost Part 3 - Mathematical Details", "url": "https://youtube.com/watch?v=ZVFeW798-2I"},
+            {"title": "XGBoost Part 4 - Crazy Cool Optimizations", "url": "https://youtube.com/watch?v=oRrKeUCEbq8"},
+        ],
+    ),
+
+    # === Neighbors ===
+    "k_neighbors_regressor": ModelMetadata(
+        icon="users",
+        complexity=15,
+        tags=["instance-based", "simple"],
+        video_links=[],
+    ),
+
+    # === SVM ===
+    "svr": ModelMetadata(
+        icon="box",
+        complexity=60,
+        tags=["kernel", "non-linear"],
+        video_links=[],
+    ),
+    "linear_svr": ModelMetadata(
+        icon="minus",
+        complexity=35,
+        tags=["fast", "linear"],
+        video_links=[],
+    ),
+    "nu_svr": ModelMetadata(
+        icon="box",
+        complexity=60,
+        tags=["kernel", "non-linear"],
+        video_links=[],
+    ),
+
+    # === Neural Networks ===
+    "mlp_regressor": ModelMetadata(
+        icon="brain",
+        complexity=70,
+        tags=["neural-network", "flexible"],
+        video_links=[
+            {"title": "Gradient Descent", "url": "https://youtube.com/watch?v=sDv4f4s2SB8"},
+        ],
+    ),
+
+    # === Other Linear Models ===
+    "bayesian_ridge": ModelMetadata(
+        icon="wave",
+        complexity=35,
+        tags=["bayesian", "regularization"],
+        video_links=[],
+    ),
+    "lars": ModelMetadata(
+        icon="arrow-right",
+        complexity=30,
+        tags=["feature-selection"],
+        video_links=[],
+    ),
+    "lasso_lars": ModelMetadata(
+        icon="scissors",
+        complexity=30,
+        tags=["feature-selection", "regularization"],
+        video_links=[],
+    ),
+    "orthogonal_matching_pursuit": ModelMetadata(
+        icon="target",
+        complexity=40,
+        tags=["sparse"],
+        video_links=[],
+    ),
+    "passive_aggressive_regressor": ModelMetadata(
+        icon="zap",
+        complexity=35,
+        tags=["online-learning"],
+        video_links=[],
+    ),
+    "huber_regressor": ModelMetadata(
+        icon="shield",
+        complexity=30,
+        tags=["robust", "outliers"],
+        video_links=[],
+    ),
+    "sgd_regressor": ModelMetadata(
+        icon="zap",
+        complexity=40,
+        tags=["online-learning", "large-data"],
+        video_links=[
+            {"title": "Gradient Descent", "url": "https://youtube.com/watch?v=sDv4f4s2SB8"},
+            {"title": "Stochastic Gradient Descent", "url": "https://youtube.com/watch?v=vMh0zVM1Biw"},
+        ],
+    ),
+
+    # === Gaussian Process ===
+    "gaussian_process_regressor": ModelMetadata(
+        icon="activity",
+        complexity=80,
+        tags=["probabilistic", "uncertainty"],
+        video_links=[],
+    ),
+
+    # === Kernel Methods ===
+    "kernel_ridge": ModelMetadata(
+        icon="circle",
+        complexity=50,
+        tags=["kernel", "regularization"],
+        video_links=[],
+    ),
+}
+
+# Default metadata for models not explicitly listed
+DEFAULT_METADATA = ModelMetadata(
+    icon="brain",
+    complexity=50,
+    tags=[],
+    video_links=[],
+)
+
+
+def get_model_metadata(model_name: str) -> ModelMetadata:
+    """Get metadata for a model, with fallback to defaults."""
+    return MODEL_METADATA.get(model_name, DEFAULT_METADATA)
+
+
 # Estimators to exclude (abstract, deprecated, or problematic)
 EXCLUDED_ESTIMATORS = {
     "DummyRegressor",  # Too simple, not useful
@@ -696,6 +944,9 @@ class ModelRegistry:
                 }
                 for p in model_type.parameters
             ]
+            # Get model metadata for UI display
+            metadata = get_model_metadata(model_type.name)
+            
             result.append({
                 "name": model_type.name,
                 "display_name": model_type.display_name,
@@ -703,7 +954,33 @@ class ModelRegistry:
                 "task_type": model_type.task_type,
                 "category": model_type.category,
                 "parameters": params,
+                # UI metadata
+                "icon": metadata.icon,
+                "complexity": metadata.complexity,
+                "coming_soon": metadata.coming_soon,
+                "tags": metadata.tags,
+                "video_links": metadata.video_links,
             })
+        # Add "Coming Soon" models that are not registered yet
+        for name, metadata in MODEL_METADATA.items():
+            if name not in self._models and metadata.coming_soon:
+                result.append({
+                    "name": name,
+                    "display_name": name.replace("_", " ").title().replace("Xgboost", "XGBoost"),
+                    "description": f"{name.replace('_', ' ').title()} regressor (Coming Soon)",
+                    "task_type": "regression",
+                    "category": "ensemble",
+                    "parameters": [],
+                    # UI metadata
+                    "icon": metadata.icon,
+                    "complexity": metadata.complexity,
+                    "coming_soon": True,
+                    "tags": metadata.tags,
+                    "video_links": metadata.video_links,
+                })
+
+        # Sort by complexity (simplest first)
+        result.sort(key=lambda m: m["complexity"])
         return result
     
     def list_by_task(self, task_type: str) -> list[dict[str, Any]]:

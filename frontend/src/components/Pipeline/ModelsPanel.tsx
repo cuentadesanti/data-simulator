@@ -14,6 +14,24 @@ import {
     ArrowRight,
     Settings,
     AlertCircle,
+    TrendingUp,
+    Shield,
+    Scissors,
+    GitMerge,
+    GitBranch,
+    Trees,
+    Zap,
+    Flame,
+    Users,
+    Box,
+    Minus,
+    Waves,
+    Target as TargetIcon,
+    Activity,
+    Circle,
+    Youtube,
+    ExternalLink,
+    HelpCircle,
 } from 'lucide-react';
 import { modelingApi, ModelingAPIError, type ModelTypeInfo, type FitResponse, type ModelParamValue, type ModelParameter, type ModelFitSummary, type ModelingError } from '../../api/modelingApi';
 import {
@@ -21,6 +39,29 @@ import {
     selectPipelineSchema,
     selectCurrentVersionId,
 } from '../../stores/pipelineStore';
+
+// Helper to map icon names to Lucide components
+const ModelIcon = ({ name, size = 16, className = "" }: { name?: string; size?: number; className?: string }) => {
+    switch (name) {
+        case 'trending-up': return <TrendingUp size={size} className={className} />;
+        case 'shield': return <Shield size={size} className={className} />;
+        case 'scissors': return <Scissors size={size} className={className} />;
+        case 'git-merge': return <GitMerge size={size} className={className} />;
+        case 'git-branch': return <GitBranch size={size} className={className} />;
+        case 'trees': return <Trees size={size} className={className} />;
+        case 'zap': return <Zap size={size} className={className} />;
+        case 'flame': return <Flame size={size} className={className} />;
+        case 'users': return <Users size={size} className={className} />;
+        case 'box': return <Box size={size} className={className} />;
+        case 'minus': return <Minus size={size} className={className} />;
+        case 'wave': return <Waves size={size} className={className} />;
+        case 'target': return <TargetIcon size={size} className={className} />;
+        case 'activity': return <Activity size={size} className={className} />;
+        case 'circle': return <Circle size={size} className={className} />;
+        case 'brain': return <Brain size={size} className={className} />;
+        default: return <Brain size={size} className={className} />;
+    }
+};
 
 export const ModelsPanel = () => {
     const schema = usePipelineStore(selectPipelineSchema);
@@ -244,25 +285,76 @@ export const ModelsPanel = () => {
                             value={selectedModel}
                             onChange={(e) => setSelectedModel(e.target.value)}
                             disabled={isLoadingModels}
-                            className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-md pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-md pl-9 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                         >
                             {modelTypes.map((m) => (
                                 <option key={m.name} value={m.name}>
-                                    {m.display_name}
+                                    {m.display_name} {m.coming_soon ? '(Coming Soon)' : ''}
                                 </option>
                             ))}
                         </select>
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-600 pointer-events-none">
+                            <ModelIcon name={currentModelType?.icon} size={14} />
+                        </div>
                         <ChevronDown
                             size={14}
                             className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
                         />
                     </div>
-                    {currentModelType && (
-                        <p className="text-xs text-gray-400 mt-1 capitalize">
-                            {currentModelType.task_type}
-                        </p>
-                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                        {currentModelType && (
+                            <p className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium uppercase tracking-wider">
+                                {currentModelType.task_type}
+                            </p>
+                        )}
+                        {currentModelType?.complexity && (
+                            <div className="flex items-center gap-1 text-[10px] text-gray-400">
+                                <span>Complexity:</span>
+                                <div className="flex gap-0.5">
+                                    {[1, 2, 3, 4, 5].map((i) => (
+                                        <div
+                                            key={i}
+                                            className={`h-1 w-2 rounded-full ${i <= (currentModelType?.complexity || 0) / 20
+                                                ? 'bg-purple-400'
+                                                : 'bg-gray-200'
+                                                }`}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
+
+                {/* Video Links / Educational Resources */}
+                {currentModelType?.video_links && currentModelType.video_links.length > 0 && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 uppercase tracking-wider">
+                            <Youtube size={12} />
+                            Learning Resources
+                        </div>
+                        <div className="space-y-1.5">
+                            {currentModelType.video_links.map((link, idx) => (
+                                <a
+                                    key={idx}
+                                    href={link.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center justify-between group p-1.5 bg-white border border-blue-200 rounded-md hover:border-blue-400 transition-colors"
+                                >
+                                    <span className="text-[11px] text-gray-700 truncate pr-2">
+                                        {link.title}
+                                    </span>
+                                    <ExternalLink size={10} className="text-blue-400 group-hover:text-blue-600 flex-shrink-0" />
+                                </a>
+                            ))}
+                        </div>
+                        <p className="text-[10px] text-blue-500 italic flex items-center gap-1">
+                            <HelpCircle size={10} />
+                            Clearly explained by StatQuest
+                        </p>
+                    </div>
+                )}
 
                 {/* Model Parameters */}
                 {currentModelType && currentModelType.parameters.length > 0 && (() => {
@@ -482,13 +574,17 @@ export const ModelsPanel = () => {
                 {/* Fit button */}
                 <button
                     onClick={handleFit}
-                    disabled={isFitting || !targetColumn || selectedFeatures.length === 0}
+                    disabled={isFitting || !targetColumn || selectedFeatures.length === 0 || currentModelType?.coming_soon}
                     className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                     {isFitting ? (
                         <>
                             <Loader2 size={14} className="animate-spin" />
                             Fitting...
+                        </>
+                    ) : currentModelType?.coming_soon ? (
+                        <>
+                            Coming Soon
                         </>
                     ) : (
                         <>
@@ -538,9 +634,22 @@ export const ModelsPanel = () => {
                             <h4 className="text-xs font-medium text-gray-600 mb-1">Metrics</h4>
                             <div className="grid grid-cols-2 gap-1 text-xs">
                                 {Object.entries(fitResult.metrics).map(([key, value]) => (
-                                    <div key={key} className="flex justify-between bg-white rounded px-2 py-1">
-                                        <span className="text-gray-500">{key}:</span>
-                                        <span className="font-mono">
+                                    <div key={key} className="flex justify-between items-center bg-white rounded px-2 py-1">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-gray-500">{key}:</span>
+                                            {key.toLowerCase() === 'r2' && (
+                                                <a
+                                                    href="https://youtube.com/watch?v=2AQKmw14mHM"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    title="R-squared, Clearly Explained"
+                                                    className="text-red-500 hover:text-red-600 transition-colors"
+                                                >
+                                                    <Youtube size={10} />
+                                                </a>
+                                            )}
+                                        </div>
+                                        <span className="font-mono text-gray-700">
                                             {typeof value === 'number' ? value.toFixed(4) : value}
                                         </span>
                                     </div>
@@ -599,8 +708,21 @@ export const ModelsPanel = () => {
                                     </div>
                                     <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1">
                                         {Object.entries(model.metrics).map(([key, value]) => (
-                                            <div key={key} className="flex justify-between text-[10px]">
-                                                <span className="text-gray-400 capitalize">{key}:</span>
+                                            <div key={key} className="flex justify-between items-center text-[10px]">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-gray-400 capitalize">{key}:</span>
+                                                    {key.toLowerCase() === 'r2' && (
+                                                        <a
+                                                            href="https://youtube.com/watch?v=2AQKmw14mHM"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            title="R-squared, Clearly Explained"
+                                                            className="text-red-400 hover:text-red-600 transition-colors"
+                                                        >
+                                                            <Youtube size={8} />
+                                                        </a>
+                                                    )}
+                                                </div>
                                                 <span className="font-mono font-medium text-gray-600">
                                                     {value.toFixed(3)}
                                                 </span>

@@ -124,6 +124,12 @@ export interface ModelTypeInfo {
     task_type: 'regression';
     category?: string;
     parameters: ModelParameter[];
+    // UI metadata
+    icon?: string;
+    complexity?: number;
+    coming_soon?: boolean;
+    tags?: string[];
+    video_links?: { title: string; url: string }[];
 }
 
 export interface ModelFitSummary {
