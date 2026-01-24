@@ -28,6 +28,21 @@ export const FormulaBar = () => {
     const [outputColumn, setOutputColumn] = useState('');
     const [expression, setExpression] = useState('');
     const [sourceColumn, setSourceColumn] = useState('');
+    const [suggestions, setSuggestions] = useState<string[]>([]);
+
+    // Show column suggestions as user types
+    const handleExpressionChange = (value: string) => {
+        setExpression(value);
+        const lastWord = value.split(/[^a-zA-Z0-9_]/).pop() || '';
+        if (lastWord.length > 0) {
+            const matches = schema
+                .map((c) => c.name)
+                .filter((name) => name.toLowerCase().startsWith(lastWord.toLowerCase()) && name !== lastWord);
+            setSuggestions(matches);
+        } else {
+            setSuggestions([]);
+        }
+    };
 
     // Load transforms on mount
     useEffect(() => {
@@ -129,18 +144,38 @@ export const FormulaBar = () => {
 
                 {/* Input field based on transform type */}
                 {selectedTransform === 'formula' ? (
-                    <input
-                        type="text"
-                        value={expression}
-                        onChange={(e) => setExpression(e.target.value)}
-                        placeholder="e.g., log(income) + age * 2"
-                        className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !isApplyingStep) {
-                                handleApply();
-                            }
-                        }}
-                    />
+                    <div className="flex-1 relative">
+                        <input
+                            type="text"
+                            value={expression}
+                            onChange={(e) => handleExpressionChange(e.target.value)}
+                            placeholder="e.g., log(income) + age * 2"
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !isApplyingStep) {
+                                    handleApply();
+                                }
+                            }}
+                        />
+                        {suggestions.length > 0 && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-auto">
+                                {suggestions.map((s) => (
+                                    <button
+                                        key={s}
+                                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-blue-50 font-mono"
+                                        onClick={() => {
+                                            const words = expression.split(/([^a-zA-Z0-9_])/);
+                                            words[words.length - 1] = s;
+                                            setExpression(words.join(''));
+                                            setSuggestions([]);
+                                        }}
+                                    >
+                                        {s}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 ) : (
                     <div className="relative">
                         <select
@@ -194,6 +229,23 @@ export const FormulaBar = () => {
                 <div className="flex items-center gap-2 mt-2 text-red-600 text-sm">
                     <AlertCircle size={14} />
                     {formulaBarError}
+                </div>
+            )}
+            {/* Available variables */}
+            {selectedTransform === 'formula' && schema.length > 0 && (
+                <div className="text-[10px] text-gray-400 mt-2 flex items-center flex-wrap gap-1">
+                    <span className="mr-1">Available:</span>
+                    {schema.map((c) => (
+                        <code
+                            key={c.name}
+                            className="px-1 bg-gray-100 rounded text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors"
+                            onClick={() => {
+                                setExpression((prev) => (prev ? `${prev} ${c.name}` : c.name));
+                            }}
+                        >
+                            {c.name}
+                        </code>
+                    ))}
                 </div>
             )}
         </div>

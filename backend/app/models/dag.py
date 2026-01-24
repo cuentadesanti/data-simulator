@@ -132,6 +132,15 @@ class NodeConfig(BaseModel):
 
     id: str = Field(..., description="Unique identifier (internal, auto-generated)")
     name: str = Field(..., description="Display name (UI only)")
+
+    @field_validator("id")
+    @classmethod
+    def validate_id(cls, v: str) -> str:
+        """Ensure node ID follows snake_case naming conventions."""
+        if not re.match(r"^[a-z][a-z0-9_]*$", v):
+            raise ValueError("Node ID must be snake_case (e.g., income_y)")
+        return v
+
     kind: NodeKind = Field(..., description="Node type: stochastic or deterministic")
     dtype: NodeDtype | None = Field(None, description="Data type (optional, inferrable)")
     scope: NodeScope = Field("row", description="Scope: global, group, or row")
@@ -150,8 +159,8 @@ class NodeConfig(BaseModel):
 
     @property
     def effective_var_name(self) -> str:
-        """Get the effective variable name derived from name (cosmetic only)."""
-        return self._to_snake_case(self.name)
+        """Get the effective variable name (canonical node ID)."""
+        return self.id
 
     @staticmethod
     def _to_snake_case(name: str) -> str:
