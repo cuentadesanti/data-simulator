@@ -30,3 +30,8 @@ pytest-asyncio>=0.23.0
 httpx>=0.26.0
 ruff>=0.2.0
 mypy>=1.8.0
+
+# Auth
+clerk-backend-api>=4.2.0
+PyJWT[crypto]>=2.8.0
+cryptography>=42.0.0

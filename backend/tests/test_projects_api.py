@@ -8,6 +8,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core import DataSimulatorError, settings
+from app.core.auth import require_auth
 from app.db.database import Base, get_db
 from app.main import app
 
@@ -34,8 +36,13 @@ def client():
         finally:
             db.close()
 
-    # Override dependency
+    async def override_require_auth():
+        """Override auth dependency for testing."""
+        return {"sub": "test-user", "user_id": "test-user"}
+
+    # Override dependencies
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[require_auth] = override_require_auth
 
     with TestClient(app) as test_client:
         yield test_client

@@ -18,6 +18,29 @@ const api: AxiosInstance = axios.create({
   },
 });
 
+// Token provider for auth
+let getToken: (() => Promise<string | null>) | null = null;
+
+export const setTokenProvider = (provider: () => Promise<string | null>) => {
+  getToken = provider;
+};
+
+// Request interceptor for auth
+api.interceptors.request.use(async (config) => {
+  if (getToken) {
+    try {
+      const token = await getToken();
+      if (token) {
+        // Use bracket notation to ensure compatibility with all axios versions/types
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.error('Failed to get auth token', error);
+    }
+  }
+  return config;
+});
+
 // Error handling
 export class APIError extends Error {
   code: string;

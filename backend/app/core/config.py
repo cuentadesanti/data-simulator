@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pydantic_settings import BaseSettings
 
-
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -12,6 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "Data Simulator"
     debug: bool = False
     environment: str = "dev"  # dev, staging, prod
+    clerk_secret_key: str = ""
 
     # Generation limits
     max_rows_hard: int = 10_000_000
@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_prefix = "DS_"
+        extra = "ignore"
 
 
 settings = Settings()
