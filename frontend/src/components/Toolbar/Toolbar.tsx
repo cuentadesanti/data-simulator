@@ -22,6 +22,7 @@ export const Toolbar: React.FC = () => {
     importDAG,
     clearDAG,
     setValidationErrors,
+    setStructuredErrors,
     setPreviewData,
     setEdgeStatuses,
     setLastValidationResult,
@@ -70,10 +71,12 @@ export const Toolbar: React.FC = () => {
 
       if (result.valid) {
         setValidationErrors([]);
+        setStructuredErrors([]);
         setLastValidationResult('valid');
         addToast('success', 'DAG is valid!');
       } else {
         setValidationErrors(result.errors);
+        setStructuredErrors(result.structured_errors || []);
         setLastValidationResult('invalid');
         addToast('error', `Validation failed: ${result.errors.length} error(s)`);
       }

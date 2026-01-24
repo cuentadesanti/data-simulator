@@ -1,6 +1,6 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosError } from 'axios';
-import type { DAGDefinition } from '../types/dag';
+import type { DAGDefinition, ValidationError } from '../types/dag';
 import type {
   Project,
   ProjectVersion,
@@ -115,6 +115,7 @@ export interface ValidationResult {
   valid: boolean;
   errors: string[];
   warnings: string[];
+  structured_errors: ValidationError[];
   topological_order?: string[];
   edge_statuses: EdgeValidation[];
   missing_edges: MissingEdge[];
