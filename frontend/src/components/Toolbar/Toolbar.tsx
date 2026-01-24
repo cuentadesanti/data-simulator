@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CheckCircle, Download, Upload, Trash2, Save } from 'lucide-react';
+import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 import { useDAGStore, selectActiveMainTab } from '../../stores/dagStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { dagApi, downloadBlob } from '../../services/api';
@@ -238,6 +239,20 @@ export const Toolbar: React.FC = () => {
 
         {/* Validation Status */}
         <ValidationStatus />
+
+        {/* Auth */}
+        <div className="ml-2 pl-2 border-l border-gray-200 flex items-center">
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="px-3 py-1.5 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800 transition-colors">
+                Sign In
+              </button>
+            </SignInButton>
+          </SignedOut>
+          <SignedIn>
+            <UserButton />
+          </SignedIn>
+        </div>
       </div>
     </div>
   );

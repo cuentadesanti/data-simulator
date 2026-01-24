@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -11,6 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from app.api.routes import dag, distributions, modeling, pipelines, projects, transforms
 from app.core import DataSimulatorError, settings
 from app.core.rate_limiter import limiter
+from app.core.auth import require_auth
 
 app = FastAPI(
     title=settings.app_name,
@@ -43,13 +44,16 @@ async def data_simulator_error_handler(request: Request, exc: DataSimulatorError
     )
 
 
-# Include routers
-app.include_router(dag.router, prefix="/api/dag", tags=["DAG"])
-app.include_router(distributions.router, prefix="/api/distributions", tags=["Distributions"])
-app.include_router(projects.router, prefix="/api/projects", tags=["Projects"])
-app.include_router(pipelines.router, prefix="/api/pipelines", tags=["Pipelines"])
-app.include_router(transforms.router, prefix="/api/transforms", tags=["Transforms"])
-app.include_router(modeling.router, prefix="/api/modeling", tags=["Modeling"])
+# Include routers with optional authentication (commented out for now to avoid breaking existing workflow if keys are missing)
+# To enable strict auth, uncomment dependencies=[Depends(require_auth)]
+# For the purpose of "Simplest" demo, we will protect the DAG and Projects routes.
+
+app.include_router(dag.router, prefix="/api/dag", tags=["DAG"], dependencies=[Depends(require_auth)])
+app.include_router(distributions.router, prefix="/api/distributions", tags=["Distributions"], dependencies=[Depends(require_auth)])
+app.include_router(projects.router, prefix="/api/projects", tags=["Projects"], dependencies=[Depends(require_auth)])
+app.include_router(pipelines.router, prefix="/api/pipelines", tags=["Pipelines"], dependencies=[Depends(require_auth)])
+app.include_router(transforms.router, prefix="/api/transforms", tags=["Transforms"], dependencies=[Depends(require_auth)])
+app.include_router(modeling.router, prefix="/api/modeling", tags=["Modeling"], dependencies=[Depends(require_auth)])
 
 
 @app.get("/health")
