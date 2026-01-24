@@ -522,7 +522,12 @@ def validate_safe_expression(expression: str, available_columns: list[str]) -> N
     available_set = set(available_columns)
     for name in referenced:
         if name not in available_set and name not in ALLOWED_FUNCTIONS:
-            raise ValueError(f"Unknown column: {name}")
+            # Suggest similar column names
+            similar = [c for c in available_columns if name.lower() in c.lower()]
+            hint = f" Did you mean: {', '.join(similar)}?" if similar else ""
+            raise ValueError(
+                f"Unknown column: '{name}'.{hint} Available: {', '.join(available_columns)}"
+            )
 
 
 def _extract_names_from_expression(expression: str) -> list[str]:

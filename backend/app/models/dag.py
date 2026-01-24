@@ -132,6 +132,15 @@ class NodeConfig(BaseModel):
 
     id: str = Field(..., description="Unique identifier (internal, auto-generated)")
     name: str = Field(..., description="Display name (UI only)")
+
+    @field_validator("id")
+    @classmethod
+    def validate_id(cls, v: str) -> str:
+        """Ensure node ID follows snake_case naming conventions."""
+        if not re.match(r"^[a-z][a-z0-9_]*$", v):
+            raise ValueError("Node ID must be snake_case (e.g., income_y)")
+        return v
+
     kind: NodeKind = Field(..., description="Node type: stochastic or deterministic")
     dtype: NodeDtype | None = Field(None, description="Data type (optional, inferrable)")
     scope: NodeScope = Field("row", description="Scope: global, group, or row")
@@ -150,8 +159,8 @@ class NodeConfig(BaseModel):
 
     @property
     def effective_var_name(self) -> str:
-        """Get the effective variable name derived from name (cosmetic only)."""
-        return self._to_snake_case(self.name)
+        """Get the effective variable name (canonical node ID)."""
+        return self.id
 
     @staticmethod
     def _to_snake_case(name: str) -> str:
@@ -303,6 +312,136 @@ class DAGDefinition(BaseModel):
     constraints: list[Constraint] = Field(default_factory=list, description="Row constraints")
     metadata: GenerationMetadata = Field(..., description="Generation metadata")
     layout: Layout | None = Field(None, description="Visual layout for the editor")
+    was_migrated: bool = Field(False, description="Internal flag: was this DAG migrated from legacy IDs?")
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_ids(cls, data: Any) -> Any:
+        """Automatically sanitize legacy node IDs and update all references.
+        
+        This enables existing DAGs with legacy IDs (e.g., 'Node 1') to work 
+        seamlessly by migrating them to canonical snake_case during load.
+        """
+        if not isinstance(data, dict) or "nodes" not in data:
+            return data
+            
+        nodes = data.get("nodes", [])
+        edges = data.get("edges", [])
+        
+        # 1. Identify nodes with invalid IDs and generate mapping
+        id_map = {} # old_id -> new_id
+        used_new_ids = set()
+        
+        # Helper to get field value regardless of whether it's a dict or object
+        def get_val(obj, key, default=None):
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
+        # First pass: collect already valid IDs to avoid collisions
+        for node in nodes:
+            node_id = get_val(node, "id")
+            if node_id and NODE_ID_PATTERN.match(node_id):
+                used_new_ids.add(node_id)
+        
+        # Second pass: generate new IDs for invalid ones
+        for node in nodes:
+            old_id = get_val(node, "id")
+            if old_id and not NODE_ID_PATTERN.match(old_id):
+                new_id = to_snake_case(old_id)
+                # Ensure uniqueness
+                base_id = new_id
+                counter = 1
+                while new_id in used_new_ids:
+                    new_id = f"{base_id}_{counter}"
+                    counter += 1
+                
+                id_map[old_id] = new_id
+                used_new_ids.add(new_id)
+        
+        if not id_map:
+            return data
+            
+        # 2. Update nodes
+        new_nodes = []
+        for node in nodes:
+            # Create a dict copy for modification
+            if isinstance(node, dict):
+                new_node = {**node}
+            else:
+                # If it's a NodeConfig object, convert to dict first
+                new_node = node.model_dump() if hasattr(node, "model_dump") else vars(node).copy()
+
+            old_id = new_node.get("id")
+            if old_id in id_map:
+                new_node["id"] = id_map[old_id]
+            
+            # Update formula node() references
+            formula = new_node.get("formula")
+            if formula:
+                for old_id_ref, new_id_ref in id_map.items():
+                    formula = formula.replace(f'node("{old_id_ref}")', f'node("{new_id_ref}")')
+                new_node["formula"] = formula
+            
+            # Update group_by
+            group_by = new_node.get("group_by")
+            if group_by in id_map:
+                new_node["group_by"] = id_map[group_by]
+                
+            new_nodes.append(new_node)
+            
+        # 3. Update edges
+        new_edges = []
+        for edge in edges:
+            if isinstance(edge, dict):
+                new_edge = {**edge}
+            else:
+                new_edge = edge.model_dump() if hasattr(edge, "model_dump") else vars(edge).copy()
+
+            source = new_edge.get("source")
+            target = new_edge.get("target")
+            if source in id_map:
+                new_edge["source"] = id_map[source]
+            if target in id_map:
+                new_edge["target"] = id_map[target]
+            new_edges.append(new_edge)
+            
+        # 4. Update constraints
+        constraints = data.get("constraints", [])
+        new_constraints = []
+        for c in constraints:
+            if isinstance(c, dict):
+                new_c = {**c}
+            else:
+                new_c = c.model_dump() if hasattr(c, "model_dump") else vars(c).copy()
+
+            target = new_c.get("target")
+            other = new_c.get("other")
+            if target in id_map:
+                new_c["target"] = id_map[target]
+            if other in id_map:
+                new_c["other"] = id_map[other]
+            new_constraints.append(new_c)
+            
+        # 5. Update layout positions
+        layout = data.get("layout")
+        new_layout = layout
+        if layout and isinstance(layout, dict) and "positions" in layout:
+            positions = layout.get("positions", {})
+            new_positions = {}
+            for old_id, pos in positions.items():
+                new_id = id_map.get(old_id, old_id)
+                new_positions[new_id] = pos
+            new_layout = {**layout, "positions": new_positions}
+            
+        return {
+            **data,
+            "nodes": new_nodes,
+            "edges": new_edges,
+            "constraints": new_constraints,
+            "layout": new_layout,
+            "was_migrated": True
+        }
 
     @field_validator("nodes")
     @classmethod
@@ -381,4 +520,7 @@ class ValidationResult(BaseModel):
     missing_edges: list[dict[str, str]] = Field(
         default_factory=list,
         description="Edges that should be added (node references without edges)",
+    )
+    sanitized_dag: DAGDefinition | None = Field(
+        None, description="The DAG definition after automatic migration/sanitization"
     )

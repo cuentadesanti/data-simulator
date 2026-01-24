@@ -50,7 +50,7 @@ def sample_dag_with_target():
         "schema_version": "1.0",
         "nodes": [
             {
-                "id": "node_1",
+                "id": "age",
                 "name": "age",
                 "kind": "stochastic",
                 "dtype": "float",
@@ -58,7 +58,7 @@ def sample_dag_with_target():
                 "distribution": {"type": "normal", "params": {"mu": 30, "sigma": 10}},
             },
             {
-                "id": "node_2",
+                "id": "income",
                 "name": "income",
                 "kind": "stochastic",
                 "dtype": "float",
@@ -66,7 +66,7 @@ def sample_dag_with_target():
                 "distribution": {"type": "normal", "params": {"mu": 50000, "sigma": 15000}},
             },
             {
-                "id": "node_3",
+                "id": "spending",
                 "name": "spending",
                 "kind": "stochastic",
                 "dtype": "float",
@@ -74,7 +74,7 @@ def sample_dag_with_target():
                 "distribution": {"type": "normal", "params": {"mu": 2000, "sigma": 500}},
             },
             {
-                "id": "node_4",
+                "id": "churned",
                 "name": "churned",
                 "kind": "stochastic",
                 "dtype": "int",

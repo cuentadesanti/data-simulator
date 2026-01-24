@@ -74,6 +74,7 @@ def generate_preview(dag: DAGDefinition) -> PreviewResponse:
         seed=seed_used,
         column_stats=column_stats,
         warnings=all_warnings,
+        sanitized_dag=dag,
     )
 
 

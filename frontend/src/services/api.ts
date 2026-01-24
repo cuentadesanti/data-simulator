@@ -118,6 +118,7 @@ export interface ValidationResult {
   topological_order?: string[];
   edge_statuses: EdgeValidation[];
   missing_edges: MissingEdge[];
+  sanitized_dag?: DAGDefinition;
 }
 
 export interface PreviewResult {
@@ -126,6 +127,7 @@ export interface PreviewResult {
   rows: number;
   seed: number;
   warnings: string[];
+  sanitized_dag?: DAGDefinition;
 }
 
 export interface GenerationResult {
