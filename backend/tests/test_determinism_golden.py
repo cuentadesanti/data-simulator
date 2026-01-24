@@ -1069,7 +1069,7 @@ class TestEdgeCasesDeterminism:
                     kind="deterministic",
                     dtype="float",
                     scope="row",
-                    formula=f"node_{i - 1} + 0.1",
+                    formula=f"n{i - 1} + 0.1",
                 )
             )
             edges.append(DAGEdge(source=f"n{i - 1}", target=f"n{i}"))

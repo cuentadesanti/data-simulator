@@ -89,9 +89,9 @@ class TestBasicSampling:
 
         result = generate_preview(dag)
 
-        assert result.columns == ["category"]
+        assert result.columns == ["cat"]
         for row in result.data:
-            assert row["category"] in ["A", "B", "C"]
+            assert row["cat"] in ["A", "B", "C"]
 
     def test_single_uniform_node(self):
         """Test sampling a single uniform distribution node."""
@@ -114,7 +114,7 @@ class TestBasicSampling:
         result = generate_preview(dag)
 
         for row in result.data:
-            assert 0.0 <= row["uniform"] < 100.0
+            assert 0.0 <= row["u"] < 100.0
 
     def test_single_bernoulli_node(self):
         """Test sampling a single Bernoulli distribution node."""
@@ -137,7 +137,7 @@ class TestBasicSampling:
         result = generate_preview(dag)
 
         for row in result.data:
-            assert row["binary"] in [0, 1]
+            assert row["b"] in [0, 1]
 
 
 class TestDeterministicNodes:
@@ -706,7 +706,7 @@ class TestEdgeCases:
                     kind="deterministic",
                     dtype="float",
                     scope="row",
-                    formula=f"node_{i - 1} + 1",
+                    formula=f"n{i - 1} + 1",
                 )
                 edges.append(DAGEdge(source=f"n{i - 1}", target=f"n{i}"))
             nodes.append(node)
@@ -720,8 +720,8 @@ class TestEdgeCases:
         # Verify the chain calculation
         for row in result.data:
             for i in range(1, 20):
-                expected = row[f"node_{i - 1}"] + 1
-                assert abs(row[f"node_{i}"] - expected) < 0.0001
+                expected = row[f"n{i - 1}"] + 1
+                assert abs(row[f"n{i}"] - expected) < 0.0001
 
 
 class TestNamespaceRestriction:

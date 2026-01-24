@@ -44,7 +44,7 @@ def sample_dag_definition():
         "schema_version": "1.0",
         "nodes": [
             {
-                "id": "node_1",
+                "id": "income",
                 "name": "Income",
                 "kind": "stochastic",
                 "dtype": "float",
@@ -52,7 +52,7 @@ def sample_dag_definition():
                 "distribution": {"type": "normal", "params": {"mu": 50000, "sigma": 10000}},
             },
             {
-                "id": "node_2",
+                "id": "age",
                 "name": "Age",
                 "kind": "stochastic",
                 "dtype": "int",
