@@ -3,7 +3,7 @@
  * Provides consistent styling and behavior across all browsers.
  */
 
-import { useState, useRef, useEffect, ReactNode } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 
 export interface DropdownOption<T = string> {
