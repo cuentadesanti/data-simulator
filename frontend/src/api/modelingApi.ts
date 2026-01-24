@@ -18,6 +18,12 @@ const api: AxiosInstance = axios.create({
 // Types
 // =============================================================================
 
+/** Valid types for model hyperparameter choice options */
+export type ModelParamChoiceValue = string | number | boolean | null;
+
+/** Valid types for model hyperparameter values */
+export type ModelParamValue = string | number | boolean | null;
+
 export interface SplitSpec {
     type: 'random' | 'none';
     test_size?: number;
@@ -30,7 +36,7 @@ export interface FitRequest {
     model_name: string;
     target?: string;
     features: string[];
-    model_params?: Record<string, unknown>;
+    model_params?: Record<string, ModelParamValue>;
     split_spec?: SplitSpec;
 }
 
@@ -57,9 +63,9 @@ export interface ModelParameter {
     display_name: string;
     type: string;
     required: boolean;
-    default: unknown;
+    default: ModelParamValue;
     description: string;
-    choices?: any[];
+    choices?: ModelParamChoiceValue[];
     min_value?: number | null;
     max_value?: number | null;
     recommended_min?: number | null;
@@ -91,7 +97,7 @@ export interface ModelFitDetail extends ModelFitSummary {
     pipeline_version_id: string;
     feature_spec: { columns: string[] };
     split_spec: SplitSpec;
-    model_params: Record<string, unknown>;
+    model_params: Record<string, ModelParamValue>;
     coefficients: Record<string, number> | null;
     diagnostics: Record<string, unknown> | null;
 }

@@ -261,9 +261,7 @@ export const projectsApi = {
   /**
    * Create a new project
    */
-  create: async (
-    data: Omit<CreateProjectRequest, 'dag'> & { dag_definition?: unknown }
-  ): Promise<Project> => {
+  create: async (data: CreateProjectRequest): Promise<Project> => {
     const response = await api.post<Project>('/api/projects', data);
     return response.data;
   },
@@ -298,7 +296,7 @@ export const projectsApi = {
    */
   createVersion: async (
     projectId: string,
-    data: { dag_definition: unknown }
+    data: { dag_definition: DAGDefinition }
   ): Promise<ProjectVersion> => {
     const response = await api.post<ProjectVersion>(`/api/projects/${projectId}/versions`, data);
     return response.data;

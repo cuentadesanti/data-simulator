@@ -2,7 +2,7 @@
  * ModelsPanel component for training and viewing ML models.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     Brain,
     Play,
@@ -15,7 +15,7 @@ import {
     Settings,
     AlertCircle,
 } from 'lucide-react';
-import { modelingApi, type ModelTypeInfo, type FitResponse } from '../../api/modelingApi';
+import { modelingApi, type ModelTypeInfo, type FitResponse, type ModelParamValue, type ModelParameter } from '../../api/modelingApi';
 import {
     usePipelineStore,
     selectPipelineSchema,
@@ -36,7 +36,7 @@ export const ModelsPanel = () => {
     const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
     const [modelName, setModelName] = useState('');
     const [testSize, setTestSize] = useState(0.2);
-    const [modelParams, setModelParams] = useState<Record<string, any>>({});
+    const [modelParams, setModelParams] = useState<Record<string, ModelParamValue>>({});
     const [paramErrors, setParamErrors] = useState<Record<string, string>>({});
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [showInternal, setShowInternal] = useState(false);
@@ -64,26 +64,26 @@ export const ModelsPanel = () => {
     }, []);
 
     // Refresh fitted models when needed
-    const refreshFits = async () => {
+    const refreshFits = useCallback(async () => {
         if (!currentVersionId) return;
         try {
             await modelingApi.listFits(currentVersionId);
         } catch (error) {
             console.error('Failed to refresh fitted models:', error);
         }
-    };
+    }, [currentVersionId]);
 
     useEffect(() => {
         refreshFits();
-    }, [currentVersionId]);
+    }, [refreshFits]);
 
     // Reset parameters when model changes
     useEffect(() => {
         const model = modelTypes.find((m) => m.name === selectedModel);
         if (model) {
-            const defaults: Record<string, any> = {};
+            const defaults: Record<string, ModelParamValue> = {};
             model.parameters.forEach((p) => {
-                defaults[p.name] = p.default;
+                defaults[p.name] = p.default as ModelParamValue;
             });
             setModelParams(defaults);
             setParamErrors({});
@@ -105,7 +105,7 @@ export const ModelsPanel = () => {
         );
     };
 
-    const handleUpdateParam = (name: string, value: any, type: string) => {
+    const handleUpdateParam = (name: string, value: ModelParamValue, type: string) => {
         setModelParams(prev => ({ ...prev, [name]: value }));
 
         // Basic validation
@@ -247,7 +247,7 @@ export const ModelsPanel = () => {
                     const advancedParams = currentModelType.parameters.filter(p => p.ui_group === 'advanced' || !p.ui_group);
                     const internalParams = currentModelType.parameters.filter(p => p.ui_group === 'internal');
 
-                    const renderParam = (p: typeof currentModelType.parameters[0]) => {
+                    const renderParam = (p: ModelParameter) => {
                         const hasError = !!paramErrors[p.name];
                         const isChoice = p.type === 'choice' && p.choices && p.choices.length > 0;
                         const isBoolean = p.type === 'boolean' || p.type === 'bool';
@@ -302,11 +302,15 @@ export const ModelsPanel = () => {
                                         <input
                                             type={p.type === 'int' || p.type === 'integer' || p.type === 'float' || p.type === 'number' ? 'number' : 'text'}
                                             step={p.type === 'float' || p.type === 'number' ? '0.01' : '1'}
-                                            value={modelParams[p.name] ?? ''}
+                                            value={typeof modelParams[p.name] === 'boolean' ? String(modelParams[p.name]) : (modelParams[p.name] ?? '') as string | number}
                                             onChange={(e) => {
                                                 const val = e.target.value;
-                                                const parsed = (p.type === 'int' || p.type === 'integer') ? parseInt(val) : (p.type === 'float' || p.type === 'number') ? parseFloat(val) : val;
-                                                handleUpdateParam(p.name, isNaN(parsed as any) ? val : parsed, p.type);
+                                                const isNumeric = p.type === 'int' || p.type === 'integer' || p.type === 'float' || p.type === 'number';
+                                                const parsed = isNumeric
+                                                    ? (p.type === 'int' || p.type === 'integer' ? parseInt(val) : parseFloat(val))
+                                                    : val;
+                                                const finalValue = (isNumeric && Number.isNaN(parsed)) ? val : (parsed as ModelParamValue);
+                                                handleUpdateParam(p.name, finalValue, p.type);
                                             }}
                                             placeholder={String(p.default)}
                                             className={`w-full border rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-1 ${hasError
