@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.models.dag import DAGDefinition
+
 
 class ColumnStats(BaseModel):
     """Statistics for a single column."""
@@ -73,6 +75,9 @@ class PreviewResponse(BaseModel):
     seed: int = Field(..., description="Random seed used")
     column_stats: list[ColumnStats] = Field(..., description="Per-column statistics")
     warnings: list[str] = Field(default_factory=list, description="Generation warnings")
+    sanitized_dag: DAGDefinition | None = Field(
+        None, description="The DAG definition after automatic migration/sanitization"
+    )
 
 
 class EvaluationResult(BaseModel):
