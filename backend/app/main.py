@@ -5,15 +5,24 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api.routes import dag, distributions, modeling, pipelines, projects, transforms
 from app.core import DataSimulatorError, settings
+from app.core.rate_limiter import limiter
 
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
     description="Synthetic data generator from probabilistic DAG models",
 )
+
+# Register rate limiter with app state
+app.state.limiter = limiter
+
+# Add rate limit exceeded exception handler
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware
 app.add_middleware(
