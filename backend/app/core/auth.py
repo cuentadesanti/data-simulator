@@ -1,7 +1,10 @@
+import logging
 import jwt
 from fastapi import HTTPException, Request
 from jwt import PyJWKClient
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Clerk JWKS URL for token verification
 # Usually: https://<your-clerk-frontend-api>/.well-known/jwks.json
@@ -27,21 +30,21 @@ async def require_auth(request: Request) -> dict:
     try:
         # 1. Decode token header to get 'kid' (Key ID) - useful for debug
         header = jwt.get_unverified_header(token)
-        print(f"DEBUG: Token header: {header}")
+        logger.debug(f"Token header: {header}")
         
         # 2. Decode payload to get issuer
         unverified_payload = jwt.decode(token, options={"verify_signature": False})
         issuer = unverified_payload.get("iss")
         
         if not issuer:
-            print("Auth error: No issuer in token")
+            logger.error("Auth error: No issuer in token")
             raise HTTPException(status_code=401, detail="Invalid token: missing issuer")
             
         # Standard Clerk JWKS URL construction
         clean_issuer = issuer.rstrip('/')
         jwks_url = f"{clean_issuer}/.well-known/jwks.json"
         
-        print(f"DEBUG: Verifying token with issuer={issuer}, jwks_url={jwks_url}")
+        logger.debug(f"Verifying token with issuer={issuer}, jwks_url={jwks_url}")
         
         # Use PyJWKClient with caching
         jwks_client = PyJWKClient(jwks_url)
@@ -55,13 +58,13 @@ async def require_auth(request: Request) -> dict:
         )
         return payload
     except jwt.ExpiredSignatureError:
-        print("Auth error: Token expired")
+        logger.warning("Auth error: Token expired")
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.InvalidTokenError as e:
-        print(f"Auth error: Invalid token - {e}")
+        logger.error(f"Auth error: Invalid token - {e}")
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
     except Exception as e:
-        print(f"Auth error: Unexpected exception - {e}")
+        logger.exception(f"Auth error: Unexpected exception - {e}")
         # Return exact error for debugging
         raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 

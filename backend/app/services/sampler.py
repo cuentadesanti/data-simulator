@@ -11,21 +11,10 @@ This module ties together all the components to generate synthetic data:
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 import numpy as np
 import pandas as pd
-
-
-def _normalize_column_name(name: str) -> str:
-    """Convert any name to valid Python identifier."""
-    # "Ability (Z)" -> "ability_z"
-    # "Test Score (Y)" -> "test_score_y"
-    name = name.lower()
-    name = re.sub(r"[^a-z0-9_]", "_", name)
-    name = re.sub(r"_+", "_", name).strip("_")
-    return name
 
 from app.core import SampleError, ValidationError, settings
 from app.core.exceptions import DistributionError
@@ -85,6 +74,7 @@ def generate_preview(dag: DAGDefinition) -> PreviewResponse:
         seed=seed_used,
         column_stats=column_stats,
         warnings=all_warnings,
+        sanitized_dag=dag,
     )
 
 
