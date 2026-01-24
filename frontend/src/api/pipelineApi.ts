@@ -2,17 +2,7 @@
  * Pipeline API client for managing versioned transform pipelines.
  */
 
-import type { AxiosInstance } from 'axios';
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-const api: AxiosInstance = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-});
+import api from '../services/api';
 
 // =============================================================================
 // Types

@@ -31,7 +31,8 @@ api.interceptors.request.use(async (config) => {
     try {
       const token = await getToken();
       if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+        // Use bracket notation to ensure compatibility with all axios versions/types
+        config.headers['Authorization'] = `Bearer ${token}`;
       }
     } catch (error) {
       console.error('Failed to get auth token', error);
