@@ -18,6 +18,7 @@ import {
     selectCurrentVersionId,
 } from '../../stores/pipelineStore';
 import { useProjectStore } from '../../stores/projectStore';
+import type { TransformInfo, PipelineStep, SchemaColumn } from '../../api/pipelineApi';
 
 // Mock the stores
 vi.mock('../../stores/pipelineStore', () => ({
@@ -63,10 +64,9 @@ vi.mock('lucide-react', () => ({
 }));
 
 describe('Pipeline Workbench Components Smoke Tests', () => {
-    const mockSchema = [{ name: 'age', dtype: 'float' }];
-    const mockTransforms = [{ name: 'formula', display_name: 'Formula', description: 'Apply a formula', parameters: [] }];
-    const mockSteps = [{
-        id: 's1',
+    const mockSchema: SchemaColumn[] = [{ name: 'age', dtype: 'float' }];
+    const mockTransforms: TransformInfo[] = [{ name: 'formula', display_name: 'Formula', description: 'Apply a formula', parameters: [] }];
+    const mockSteps: PipelineStep[] = [{
         step_id: 's1',
         type: 'formula',
         output_column: 'age_sq',
@@ -81,7 +81,7 @@ describe('Pipeline Workbench Components Smoke Tests', () => {
         // Default mock setup for selectors
         vi.mocked(selectPipelineSchema).mockReturnValue(mockSchema);
         vi.mocked(selectPipelineSteps).mockReturnValue([]);
-        vi.mocked(selectAvailableTransforms).mockReturnValue(mockTransforms as any);
+        vi.mocked(selectAvailableTransforms).mockReturnValue(mockTransforms);
         vi.mocked(selectIsMaterializing).mockReturnValue(false);
         vi.mocked(selectIsApplyingStep).mockReturnValue(false);
         vi.mocked(selectFormulaBarError).mockReturnValue(null);
@@ -89,7 +89,7 @@ describe('Pipeline Workbench Components Smoke Tests', () => {
         vi.mocked(selectCurrentVersionId).mockReturnValue('v1');
 
         // Default mock for usePipelineStore
-        vi.mocked(usePipelineStore).mockImplementation((selector: any) => {
+        vi.mocked(usePipelineStore).mockImplementation((selector: unknown) => {
             if (typeof selector === 'function') {
                 const mockState = {
                     availableTransforms: mockTransforms,
@@ -104,11 +104,11 @@ describe('Pipeline Workbench Components Smoke Tests', () => {
                     materialize: vi.fn(),
                     refreshTransformsCatalog: vi.fn(),
                 };
-                return selector(mockState);
+                return (selector as (state: typeof mockState) => unknown)(mockState);
             }
             return {
                 setFormulaBarError: vi.fn(),
-            } as any;
+            };
         });
     });
 
@@ -118,13 +118,13 @@ describe('Pipeline Workbench Components Smoke Tests', () => {
     });
 
     it('renders RecipePanel without crashing', () => {
-        vi.mocked(selectPipelineSteps).mockReturnValue(mockSteps as any);
+        vi.mocked(selectPipelineSteps).mockReturnValue(mockSteps);
         render(<RecipePanel />);
         expect(screen.getByText('Recipe')).toBeDefined();
     });
 
     it('renders ModelsPanel without crashing', () => {
-        vi.mocked(useProjectStore).mockReturnValue({ currentVersionId: 'dv1' } as any);
+        vi.mocked(useProjectStore).mockReturnValue({ currentVersionId: 'dv1' } as never);
         render(<ModelsPanel />);
         expect(screen.getByText('Model Training')).toBeDefined();
     });

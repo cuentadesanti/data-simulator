@@ -1,3 +1,5 @@
+import type { DAGDefinition } from './dag';
+
 // Project and Version types for project management
 
 export interface ProjectVersion {
@@ -20,7 +22,7 @@ export interface Project {
 export interface CreateProjectRequest {
   name: string;
   description?: string;
-  dag?: unknown; // Initial DAG definition
+  dag_definition?: DAGDefinition; // Initial DAG definition
 }
 
 export interface UpdateProjectRequest {
@@ -29,5 +31,5 @@ export interface UpdateProjectRequest {
 }
 
 export interface CreateVersionRequest {
-  dag: unknown; // DAG definition
+  dag_definition: DAGDefinition; // DAG definition
 }
