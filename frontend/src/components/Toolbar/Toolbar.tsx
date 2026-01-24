@@ -63,6 +63,11 @@ export const Toolbar: React.FC = () => {
       // Always update edge statuses from validation result
       setEdgeStatuses(result.edge_statuses || [], result.missing_edges || []);
 
+      // If backend sanitized/migrated IDs, update local state
+      if (result.sanitized_dag?.was_migrated) {
+        importDAG(result.sanitized_dag);
+      }
+
       if (result.valid) {
         setValidationErrors([]);
         setLastValidationResult('valid');
@@ -92,6 +97,12 @@ export const Toolbar: React.FC = () => {
       const dag = exportDAG();
       const result = await dagApi.preview(dag);
       setPreviewData(result.data, result.columns);
+
+      // If backend sanitized/migrated IDs, update local state
+      if (result.sanitized_dag?.was_migrated) {
+        importDAG(result.sanitized_dag);
+      }
+
       addToast('success', `Preview generated: ${result.rows} rows`);
     } catch (error) {
       console.error('Preview error:', error);

@@ -198,6 +198,7 @@ def validate_dag(dag: DAGDefinition) -> ValidationResult:
         topological_order=topological_order if valid else None,
         edge_statuses=edge_statuses,
         missing_edges=missing_edges,
+        sanitized_dag=dag,
     )
 
 

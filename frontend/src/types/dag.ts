@@ -105,6 +105,7 @@ export interface DAGDefinition {
   context: Record<string, unknown>;
   metadata: GenerationMetadata;
   layout?: Layout;
+  was_migrated?: boolean;
 }
 
 // React Flow node data
