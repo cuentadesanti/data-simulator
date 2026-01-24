@@ -39,6 +39,7 @@ import {
     selectPipelineSchema,
     selectCurrentVersionId,
 } from '../../stores/pipelineStore';
+import { Dropdown, type DropdownOption } from '../common';
 
 // Helper to map icon names to Lucide components
 const ModelIcon = ({ name, size = 16, className = "" }: { name?: string; size?: number; className?: string }) => {
@@ -280,27 +281,31 @@ export const ModelsPanel = () => {
                     <label className="block text-xs font-medium text-gray-600 mb-1">
                         Model Type
                     </label>
-                    <div className="relative">
-                        <select
-                            value={selectedModel}
-                            onChange={(e) => setSelectedModel(e.target.value)}
-                            disabled={isLoadingModels}
-                            className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-md pl-9 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        >
-                            {modelTypes.map((m) => (
-                                <option key={m.name} value={m.name}>
-                                    {m.display_name} {m.coming_soon ? '(Coming Soon)' : ''}
-                                </option>
-                            ))}
-                        </select>
-                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-600 pointer-events-none">
-                            <ModelIcon name={currentModelType?.icon} size={14} />
-                        </div>
-                        <ChevronDown
-                            size={14}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                        />
-                    </div>
+                    <Dropdown
+                        options={modelTypes.map((m): DropdownOption<string> => ({
+                            value: m.name,
+                            label: `${m.display_name}${m.coming_soon ? ' (Coming Soon)' : ''}`,
+                            icon: <ModelIcon name={m.icon} size={14} />,
+                            disabled: m.coming_soon,
+                        }))}
+                        value={selectedModel}
+                        onChange={setSelectedModel}
+                        disabled={isLoadingModels || isFitting}
+                        icon={<ModelIcon name={currentModelType?.icon} size={14} />}
+                        renderOption={(option, isSelected) => (
+                            <div
+                                className={`
+                                    flex items-center gap-2 px-3 py-2
+                                    ${isSelected ? 'bg-purple-50 text-purple-700' : 'text-gray-700'}
+                                    ${option.disabled ? 'opacity-50' : 'hover:bg-gray-50'}
+                                    transition-colors
+                                `}
+                            >
+                                <span className="text-purple-600">{option.icon}</span>
+                                <span className="flex-1 text-sm">{option.label}</span>
+                            </div>
+                        )}
+                    />
                     <div className="flex items-center gap-2 mt-1">
                         {currentModelType && (
                             <p className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium uppercase tracking-wider">
@@ -389,29 +394,18 @@ export const ModelsPanel = () => {
                                         <span className="text-xs text-gray-500">Enabled</span>
                                     </label>
                                 ) : isChoice ? (
-                                    <div className="relative">
-                                        <select
-                                            value={modelParams[p.name] === null ? 'null' : String(modelParams[p.name] ?? p.default)}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                handleUpdateParam(p.name, val === 'null' ? null : val, p.type);
-                                            }}
-                                            className={`w-full appearance-none bg-white border rounded-md pl-2 pr-8 py-1.5 text-xs focus:outline-none focus:ring-1 ${hasError
-                                                ? 'border-red-300 focus:ring-red-500'
-                                                : 'border-gray-300 focus:ring-purple-500'
-                                                }`}
-                                        >
-                                            {p.choices?.map((choice) => (
-                                                <option key={choice === null ? 'null' : String(choice)} value={choice === null ? 'null' : String(choice)}>
-                                                    {choice === null ? 'None' : String(choice)}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown
-                                            size={12}
-                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                                        />
-                                    </div>
+                                    <Dropdown
+                                        options={(p.choices ?? []).map((choice): DropdownOption<string> => ({
+                                            value: choice === null ? 'null' : String(choice),
+                                            label: choice === null ? 'None' : String(choice),
+                                        }))}
+                                        value={modelParams[p.name] === null ? 'null' : String(modelParams[p.name] ?? p.default)}
+                                        onChange={(val) => {
+                                            handleUpdateParam(p.name, val === 'null' ? null : val, p.type);
+                                        }}
+                                        size="sm"
+                                        error={hasError}
+                                    />
                                 ) : (
                                     <>
                                         <input
@@ -509,24 +503,18 @@ export const ModelsPanel = () => {
                         <Target size={12} />
                         Target Column
                     </label>
-                    <div className="relative">
-                        <select
-                            value={targetColumn}
-                            onChange={(e) => setTargetColumn(e.target.value)}
-                            className="w-full appearance-none bg-gray-50 border border-gray-300 rounded-md pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        >
-                            <option value="">Select target...</option>
-                            {numericColumns.map((col) => (
-                                <option key={col.name} value={col.name}>
-                                    {col.name}
-                                </option>
-                            ))}
-                        </select>
-                        <ChevronDown
-                            size={14}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                        />
-                    </div>
+                    <Dropdown
+                        options={[
+                            { value: '', label: 'Select target...' },
+                            ...numericColumns.map((col): DropdownOption<string> => ({
+                                value: col.name,
+                                label: col.name,
+                            })),
+                        ]}
+                        value={targetColumn}
+                        onChange={setTargetColumn}
+                        placeholder="Select target..."
+                    />
                 </div>
 
                 {/* Feature columns */}

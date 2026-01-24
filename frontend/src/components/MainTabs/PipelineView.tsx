@@ -16,10 +16,10 @@ import {
     Play,
     PlusCircle,
     RefreshCw,
-    ChevronDown,
     Sparkles,
     X,
 } from 'lucide-react';
+import { Dropdown, type DropdownOption } from '../common';
 import { FormulaBar, RecipePanel, ModelsPanel } from '../Pipeline';
 import { PreviewTable } from '../Preview/PreviewTable';
 import {
@@ -350,25 +350,19 @@ export const PipelineView = () => {
                             {/* Limit selector */}
                             <div className="flex items-center gap-2">
                                 <label className="text-xs text-gray-500 font-medium">Rows:</label>
-                                <div className="relative">
-                                    <select
-                                        value={materializeLimit}
-                                        onChange={(e) =>
-                                            setMaterializeLimit(parseInt(e.target.value))
-                                        }
-                                        className="appearance-none bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 pr-8 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all cursor-pointer"
-                                    >
-                                        <option value={100}>100</option>
-                                        <option value={500}>500</option>
-                                        <option value={1000}>1,000</option>
-                                        <option value={5000}>5,000</option>
-                                        <option value={10000}>10,000</option>
-                                    </select>
-                                    <ChevronDown
-                                        size={12}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                                    />
-                                </div>
+                                <Dropdown
+                                    options={[
+                                        { value: 100, label: '100' },
+                                        { value: 500, label: '500' },
+                                        { value: 1000, label: '1,000' },
+                                        { value: 5000, label: '5,000' },
+                                        { value: 10000, label: '10,000' },
+                                    ] as DropdownOption<number>[]}
+                                    value={materializeLimit}
+                                    onChange={setMaterializeLimit}
+                                    size="sm"
+                                    className="w-24"
+                                />
                             </div>
 
                             {/* Materialize button */}
