@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     # API
     app_name: str = "Data Simulator"
     debug: bool = False
+    environment: str = "dev"  # dev, staging, prod
 
     # Generation limits
     max_rows_hard: int = 10_000_000

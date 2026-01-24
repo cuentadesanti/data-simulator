@@ -5,9 +5,10 @@ from __future__ import annotations
 from io import StringIO
 from typing import Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
+from app.core.rate_limiter import GENERATE_RATE_LIMIT, PREVIEW_RATE_LIMIT, limiter
 from app.models.dag import DAGDefinition, ValidationResult
 from app.models.generation import GenerationResult, PreviewResponse
 from app.services.validator import validate_dag
@@ -30,11 +31,14 @@ async def validate(dag: DAGDefinition) -> ValidationResult:
 
 
 @router.post("/preview", response_model=PreviewResponse)
-async def preview(dag: DAGDefinition) -> PreviewResponse:
+@limiter.limit(PREVIEW_RATE_LIMIT)
+async def preview(request: Request, dag: DAGDefinition) -> PreviewResponse:
     """Generate a preview sample from the DAG.
 
     Uses the same engine as /generate but with a smaller sample size.
     Always returns JSON, always synchronous.
+
+    Rate limited to 30 requests per minute per IP.
     """
     # Import here to avoid circular imports
     from app.services.sampler import generate_preview
@@ -43,7 +47,9 @@ async def preview(dag: DAGDefinition) -> PreviewResponse:
 
 
 @router.post("/generate")
+@limiter.limit(GENERATE_RATE_LIMIT)
 async def generate(
+    request: Request,
     dag: DAGDefinition,
     format: Literal["csv", "json", "parquet"] = Query(default="csv"),
 ):
@@ -52,6 +58,8 @@ async def generate(
     Returns the generated data in the requested format (csv, json, parquet).
     For small datasets, streams data directly.
     For large datasets (future), would return a job_id for async processing.
+
+    Rate limited to 10 requests per minute per IP.
     """
     # Import here to avoid circular imports
     from app.services.sampler import generate_data_with_df
@@ -100,3 +108,4 @@ async def generate(
                 "X-Columns": ",".join(result.columns),
             },
         )
+
