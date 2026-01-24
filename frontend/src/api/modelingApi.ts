@@ -3,6 +3,59 @@
  */
 
 import api from '../services/api';
+import type { AxiosError } from 'axios';
+
+// =============================================================================
+// Error Types
+// =============================================================================
+
+export type ModelingErrorCode =
+    | 'PIPELINE_NOT_FOUND'
+    | 'MODEL_NOT_FOUND'
+    | 'UNKNOWN_MODEL_TYPE'
+    | 'MISSING_TARGET'
+    | 'INVALID_TARGET'
+    | 'INVALID_FEATURES'
+    | 'NO_VALID_ROWS'
+    | 'INTEGRITY_ERROR'
+    | 'VALIDATION_ERROR';
+
+export interface ModelingError {
+    code: ModelingErrorCode;
+    message: string;
+    field?: string;
+    suggestion?: string;
+    context?: Record<string, unknown>;
+}
+
+export interface ModelingErrorResponse {
+    success: false;
+    errors: ModelingError[];
+}
+
+export class ModelingAPIError extends Error {
+    public readonly errors: ModelingError[];
+    public readonly firstError: ModelingError;
+
+    constructor(errors: ModelingError[]) {
+        const firstError = errors[0];
+        super(firstError?.message || 'Modeling operation failed');
+        this.name = 'ModelingAPIError';
+        this.errors = errors;
+        this.firstError = firstError;
+    }
+}
+
+function isModelingErrorResponse(data: unknown): data is ModelingErrorResponse {
+    return (
+        typeof data === 'object' &&
+        data !== null &&
+        'success' in data &&
+        (data as ModelingErrorResponse).success === false &&
+        'errors' in data &&
+        Array.isArray((data as ModelingErrorResponse).errors)
+    );
+}
 
 // =============================================================================
 // Types
@@ -106,19 +159,37 @@ export const modelingApi = {
     },
 
     /**
-     * Fit a model on pipeline data
+     * Fit a model on pipeline data.
+     * Throws ModelingAPIError with structured errors on failure.
      */
     fit: async (request: FitRequest): Promise<FitResponse> => {
-        const response = await api.post<FitResponse>('/api/modeling/fit', request);
-        return response.data;
+        try {
+            const response = await api.post<FitResponse>('/api/modeling/fit', request);
+            return response.data;
+        } catch (error) {
+            const axiosError = error as AxiosError;
+            if (axiosError.response?.data && isModelingErrorResponse(axiosError.response.data)) {
+                throw new ModelingAPIError(axiosError.response.data.errors);
+            }
+            throw error;
+        }
     },
 
     /**
-     * Generate predictions using a fitted model
+     * Generate predictions using a fitted model.
+     * Throws ModelingAPIError with structured errors on failure.
      */
     predict: async (request: PredictRequest): Promise<PredictResponse> => {
-        const response = await api.post<PredictResponse>('/api/modeling/predict', request);
-        return response.data;
+        try {
+            const response = await api.post<PredictResponse>('/api/modeling/predict', request);
+            return response.data;
+        } catch (error) {
+            const axiosError = error as AxiosError;
+            if (axiosError.response?.data && isModelingErrorResponse(axiosError.response.data)) {
+                throw new ModelingAPIError(axiosError.response.data.errors);
+            }
+            throw error;
+        }
     },
 
     /**
