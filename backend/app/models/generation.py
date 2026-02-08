@@ -12,7 +12,8 @@ from app.models.dag import DAGDefinition
 class ColumnStats(BaseModel):
     """Statistics for a single column."""
 
-    node_id: str = Field(..., description="Node ID")
+    node_id: str = Field(..., description="Node ID (stable identifier)")
+    var_name: str = Field(..., description="Variable/column name (display name)")
     dtype: str = Field(..., description="Data type")
 
     # Numeric stats

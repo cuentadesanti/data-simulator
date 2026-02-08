@@ -67,6 +67,14 @@ async def require_auth(request: Request) -> dict:
             logger.error("Auth error: No issuer in token")
             raise HTTPException(status_code=401, detail="Not authenticated")
 
+        # Validate issuer if configured (prevents SSRF attacks)
+        if settings.clerk_issuer:
+            expected_issuer = settings.clerk_issuer.rstrip("/")
+            actual_issuer = issuer.rstrip("/")
+            if actual_issuer != expected_issuer:
+                logger.error(f"Auth error: Invalid issuer. Expected {expected_issuer}, got {actual_issuer}")
+                raise HTTPException(status_code=401, detail="Not authenticated")
+
         # Standard Clerk JWKS URL construction
         clean_issuer = issuer.rstrip("/")
         jwks_url = f"{clean_issuer}/.well-known/jwks.json"
