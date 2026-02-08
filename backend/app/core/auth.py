@@ -46,6 +46,9 @@ async def require_auth(request: Request) -> dict:
     Raises:
         HTTPException: 401 if authentication fails
     """
+    if settings.auth_bypass:
+        return {"sub": "local-dev-user", "auth_mode": "bypass"}
+
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")

@@ -18,6 +18,21 @@ import {
     selectCurrentVersionId,
 } from '../../stores/pipelineStore';
 import { useProjectStore } from '../../stores/projectStore';
+import {
+    useModelingStore,
+    selectModelTypes,
+    selectIsLoadingModelTypes,
+    selectSelectedModel,
+    selectModelName,
+    selectModelParams,
+    selectParamErrors,
+    selectTestSize,
+    selectTargetColumn,
+    selectSelectedFeatures,
+    selectShowAdvanced,
+    selectShowInternal,
+    selectSavedConfigs,
+} from '../../stores/modelingStore';
 import type { TransformInfo, PipelineStep, SchemaColumn } from '../../api/pipelineApi';
 
 // Mock the stores
@@ -37,30 +52,20 @@ vi.mock('../../stores/projectStore', () => ({
     useProjectStore: vi.fn(),
 }));
 
-// Mock Lucide icons
-vi.mock('lucide-react', () => ({
-    Plus: () => <div data-testid="plus-icon" />,
-    Trash2: () => <div data-testid="trash-icon" />,
-    Play: () => <div data-testid="play-icon" />,
-    Brain: () => <div data-testid="brain-icon" />,
-    Info: () => <div data-testid="info-icon" />,
-    AlertCircle: () => <div data-testid="alert-icon" />,
-    Loader2: () => <div data-testid="loader-icon" />,
-    ArrowRight: () => <div data-testid="arrow-right-icon" />,
-    BarChart3: () => <div data-testid="bar-chart-icon" />,
-    History: () => <div data-testid="history-icon" />,
-    ChevronDown: () => <div data-testid="chevron-down-icon" />,
-    ChevronUp: () => <div data-testid="chevron-up-icon" />,
-    Search: () => <div data-testid="search-icon" />,
-    Layers: () => <div data-testid="layers-icon" />,
-    Target: () => <div data-testid="target-icon" />,
-    Cpu: () => <div data-testid="cpu-icon" />,
-    Settings: () => <div data-testid="settings-icon" />,
-    Database: () => <div data-testid="database-icon" />,
-    Table: () => <div data-testid="table-icon" />,
-    FileText: () => <div data-testid="file-text-icon" />,
-    Save: () => <div data-testid="save-icon" />,
-    X: () => <div data-testid="x-icon" />,
+vi.mock('../../stores/modelingStore', () => ({
+    useModelingStore: vi.fn(),
+    selectModelTypes: vi.fn(),
+    selectIsLoadingModelTypes: vi.fn(),
+    selectSelectedModel: vi.fn(),
+    selectModelName: vi.fn(),
+    selectModelParams: vi.fn(),
+    selectParamErrors: vi.fn(),
+    selectTestSize: vi.fn(),
+    selectTargetColumn: vi.fn(),
+    selectSelectedFeatures: vi.fn(),
+    selectShowAdvanced: vi.fn(),
+    selectShowInternal: vi.fn(),
+    selectSavedConfigs: vi.fn(),
 }));
 
 describe('Pipeline Workbench Components Smoke Tests', () => {
@@ -86,7 +91,7 @@ describe('Pipeline Workbench Components Smoke Tests', () => {
         vi.mocked(selectIsApplyingStep).mockReturnValue(false);
         vi.mocked(selectFormulaBarError).mockReturnValue(null);
         vi.mocked(selectCurrentPipelineId).mockReturnValue('p1');
-        vi.mocked(selectCurrentVersionId).mockReturnValue('v1');
+        vi.mocked(selectCurrentVersionId).mockReturnValue(null);
 
         // Default mock for usePipelineStore
         vi.mocked(usePipelineStore).mockImplementation((selector: unknown) => {
@@ -98,7 +103,7 @@ describe('Pipeline Workbench Components Smoke Tests', () => {
                     isApplyingStep: false,
                     formulaBarError: null,
                     currentPipelineId: 'p1',
-                    currentVersionId: 'v1',
+                    currentVersionId: null,
                     setFormulaBarError: vi.fn(),
                     addStep: vi.fn(),
                     materialize: vi.fn(),
@@ -109,6 +114,52 @@ describe('Pipeline Workbench Components Smoke Tests', () => {
             return {
                 setFormulaBarError: vi.fn(),
             };
+        });
+
+        vi.mocked(selectModelTypes).mockReturnValue([]);
+        vi.mocked(selectIsLoadingModelTypes).mockReturnValue(false);
+        vi.mocked(selectSelectedModel).mockReturnValue('linear_regression');
+        vi.mocked(selectModelName).mockReturnValue('');
+        vi.mocked(selectModelParams).mockReturnValue({});
+        vi.mocked(selectParamErrors).mockReturnValue({});
+        vi.mocked(selectTestSize).mockReturnValue(0.2);
+        vi.mocked(selectTargetColumn).mockReturnValue('');
+        vi.mocked(selectSelectedFeatures).mockReturnValue([]);
+        vi.mocked(selectShowAdvanced).mockReturnValue(false);
+        vi.mocked(selectShowInternal).mockReturnValue(false);
+        vi.mocked(selectSavedConfigs).mockReturnValue([]);
+
+        vi.mocked(useModelingStore).mockImplementation((selector: unknown) => {
+            if (typeof selector === 'function') {
+                const mockState = {
+                    modelTypes: [],
+                    isLoadingModelTypes: false,
+                    selectedModel: 'linear_regression',
+                    modelName: '',
+                    modelParams: {},
+                    paramErrors: {},
+                    testSize: 0.2,
+                    targetColumn: '',
+                    selectedFeatures: [],
+                    showAdvanced: false,
+                    showInternal: false,
+                    savedConfigs: [],
+                    fetchModelTypes: vi.fn(),
+                    setSelectedModel: vi.fn(),
+                    setModelName: vi.fn(),
+                    setTestSize: vi.fn(),
+                    setTargetColumn: vi.fn(),
+                    toggleFeature: vi.fn(),
+                    setShowAdvanced: vi.fn(),
+                    setShowInternal: vi.fn(),
+                    updateParam: vi.fn(),
+                    saveCurrentConfig: vi.fn(),
+                    loadConfig: vi.fn(),
+                    deleteConfig: vi.fn(),
+                };
+                return (selector as (state: typeof mockState) => unknown)(mockState);
+            }
+            return undefined;
         });
     });
 

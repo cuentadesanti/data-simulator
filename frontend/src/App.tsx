@@ -11,22 +11,25 @@ import { useDAGStore, selectActiveMainTab } from './stores/dagStore';
 
 import {
   useAuth,
-  SignedIn,
-  SignedOut,
-  RedirectToSignIn,
 } from '@clerk/clerk-react';
 import { setTokenProvider } from './services/api';
+import { isAuthBypassed } from './utils/auth';
 import '@xyflow/react/dist/style.css';
 
 function App() {
   const hasUnsavedChanges = useProjectStore(selectHasUnsavedChanges);
   const activeTab = useDAGStore(selectActiveMainTab);
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
+  const authBypassed = isAuthBypassed();
 
   // Initialize auth token provider
   useEffect(() => {
+    if (authBypassed) {
+      setTokenProvider(async () => null);
+      return;
+    }
     setTokenProvider(getToken);
-  }, [getToken]);
+  }, [authBypassed, getToken]);
 
   // Warn before leaving with unsaved changes
   useEffect(() => {
@@ -45,7 +48,7 @@ function App() {
   return (
     <ToastProvider>
       <ReactFlowProvider>
-        <SignedIn>
+        {(authBypassed || isSignedIn) ? (
           <div className="h-screen w-full flex flex-col bg-gray-50">
             {/* Top Toolbar */}
             <header className="flex-shrink-0 border-b border-gray-200 bg-white">
@@ -78,14 +81,14 @@ function App() {
               )}
             </div>
           </div>
-        </SignedIn>
-        <SignedOut>
-          <RedirectToSignIn />
-        </SignedOut>
+        ) : (
+          <div className="h-screen w-full flex items-center justify-center bg-gray-50 text-gray-600">
+            Redirecting to sign-in...
+          </div>
+        )}
       </ReactFlowProvider>
     </ToastProvider>
   );
 }
 
 export default App;
-

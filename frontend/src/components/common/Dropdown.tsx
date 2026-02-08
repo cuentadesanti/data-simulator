@@ -171,7 +171,7 @@ export function Dropdown<T = string>({
             {isOpen && (
                 <div
                     ref={listRef}
-                    className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto"
+                    className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-auto"
                 >
                     {options.map((option, index) => {
                         const isSelected = option.value === value;
