@@ -10,6 +10,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.routes import dag, distributions, modeling, pipelines, projects, transforms
 from app.core import DataSimulatorError, settings
+from app.core.config import get_cors_origins
 from app.core.rate_limiter import limiter
 from app.core.auth import require_auth
 
@@ -28,7 +29,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

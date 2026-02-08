@@ -24,6 +24,7 @@ dependencies = [
     "clerk-backend-api>=4.2.0",
     "PyJWT[crypto]>=2.8.0",
     "cryptography>=42.0.0",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]

@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     environment: str = "dev"  # dev, staging, prod
     clerk_secret_key: str = ""
 
+    # CORS - comma-separated list of allowed origins
+    # Default allows localhost for dev. In prod, set explicitly to your frontend domain(s)
+    cors_origins: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
+
     # Generation limits
     max_rows_hard: int = 10_000_000
     max_nodes: int = 500
@@ -42,6 +46,26 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def get_cors_origins() -> list[str]:
+    """Parse CORS origins from settings.
+
+    Returns:
+        List of allowed origin strings. Returns ["*"] only in dev mode if origins is "*".
+    """
+    origins_str = settings.cors_origins.strip()
+
+    # Only allow wildcard in dev mode
+    if origins_str == "*":
+        if settings.environment == "dev":
+            return ["*"]
+        else:
+            # In prod, never allow wildcard - default to empty (no CORS)
+            return []
+
+    # Parse comma-separated list
+    return [origin.strip() for origin in origins_str.split(",") if origin.strip()]
 
 
 # Reserved function names (cannot be used as node IDs)

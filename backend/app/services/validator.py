@@ -379,7 +379,8 @@ def _validate_formula_syntax(
 
             try:
                 # Try to parse the formula with test data
-                parse_formula(node.formula, test_row_data, test_context)
+                # Pass id_to_var_name to support canonical node("id") references
+                parse_formula(node.formula, test_row_data, test_context, id_to_var_name)
             except FormulaParseError as e:
                 error_detail = e.details.get("error", str(e)) if e.details else str(e)
                 _add_error(
