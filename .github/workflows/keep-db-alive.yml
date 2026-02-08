@@ -1,0 +1,40 @@
+name: Keep Database Alive
+
+# Run daily at 3 AM UTC to prevent Supabase free-tier auto-pause
+on:
+  schedule:
+    - cron: '0 3 * * *'  # Daily at 3 AM UTC
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  ping-database:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install sqlalchemy psycopg2-binary
+
+      - name: Ping database
+        env:
+          DS_DATABASE_URL: ${{ secrets.DS_DATABASE_URL }}
+        run: |
+          python scripts/keep_db_alive.py
+
+      - name: Report status
+        if: always()
+        run: |
+          if [ $? -eq 0 ]; then
+            echo "✅ Database keepalive successful"
+          else
+            echo "❌ Database keepalive failed"
+            exit 1
+          fi
