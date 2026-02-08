@@ -13,11 +13,8 @@ import {
     Table2,
     Brain,
     Loader2,
-    Play,
-    PlusCircle,
     RefreshCw,
     Sparkles,
-    X,
 } from 'lucide-react';
 import { Dropdown, type DropdownOption } from '../common';
 import { FormulaBar, RecipePanel, ModelsPanel } from '../Pipeline';
@@ -77,6 +74,7 @@ export const PipelineView = () => {
     );
     const materialize = usePipelineStore((state) => state.materialize);
     const clearPipeline = usePipelineStore((state) => state.clearPipeline);
+    const createProject = useProjectStore((state) => state.createProject);
 
     const dagPreviewData = useDAGStore(selectPreviewData);
     const dagVersionId = useProjectStore(selectCurrentDAGVersionId);
@@ -84,14 +82,13 @@ export const PipelineView = () => {
 
     const [activeSubTab, setActiveSubTab] = useState<SubTabId>('table');
     const [showRecipePanel, setShowRecipePanel] = useState(true);
-    const [isCreating, setIsCreating] = useState(false);
+    const [isCreatingAnonymous, setIsCreatingAnonymous] = useState(false);
+    const [anonymousCreateError, setAnonymousCreateError] = useState<string | null>(null);
+    const [anonymousCreateAttempted, setAnonymousCreateAttempted] = useState(false);
     const [materializeLimit, setMaterializeLimit] = useState(1000);
 
-    // Pipeline creation state
-    const [showCreateModal, setShowCreateModal] = useState(false);
-    const [pipelineName, setPipelineName] = useState('');
-    const [seed, setSeed] = useState(42);
-    const [sampleSize, setSampleSize] = useState(1000);
+    const [seed] = useState(42);
+    const [sampleSize] = useState(1000);
 
     const hasDagPreview = dagPreviewData && dagPreviewData.length > 0;
     const hasPipeline = !!currentPipelineId;
@@ -112,24 +109,40 @@ export const PipelineView = () => {
         return steps.map((s) => s.output_column);
     }, [steps]);
 
-    const handleCreatePipeline = async () => {
-        if (!projectId || !dagVersionId || !pipelineName.trim()) return;
+    const handleCreateAnonymousPipeline = async () => {
+        if (!hasDagPreview) return;
 
-        setIsCreating(true);
+        setIsCreatingAnonymous(true);
+        setAnonymousCreateError(null);
         try {
+            let targetProjectId = projectId;
+            let targetDagVersionId = dagVersionId;
+
+            if (!targetProjectId || !targetDagVersionId) {
+                const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+                const scratchProject = await createProject(`Untitled Project (${timestamp})`);
+                targetProjectId = scratchProject.id;
+                targetDagVersionId = scratchProject.current_version?.id || null;
+            }
+
+            if (!targetProjectId || !targetDagVersionId) {
+                throw new Error('Unable to initialize anonymous project version');
+            }
+
             await createPipelineFromSimulation(
-                projectId,
-                pipelineName.trim(),
-                dagVersionId,
+                targetProjectId,
+                'Untitled Pipeline',
+                targetDagVersionId,
                 seed,
                 sampleSize
             );
-            setShowCreateModal(false);
-            setPipelineName('');
         } catch (error) {
-            console.error('Failed to create pipeline:', error);
+            console.error('Failed to create anonymous pipeline:', error);
+            setAnonymousCreateError(
+                error instanceof Error ? error.message : 'Failed to initialize anonymous pipeline'
+            );
         } finally {
-            setIsCreating(false);
+            setIsCreatingAnonymous(false);
         }
     };
 
@@ -138,14 +151,26 @@ export const PipelineView = () => {
         await materialize(materializeLimit);
     };
 
-    // Reset modal state when it closes
+    // Start anonymous pipeline automatically when DAG preview exists.
     useEffect(() => {
-        if (!showCreateModal) {
-            setPipelineName('');
-            setSeed(42);
-            setSampleSize(1000);
+        if (!hasDagPreview) {
+            setAnonymousCreateAttempted(false);
+            setAnonymousCreateError(null);
+            return;
         }
-    }, [showCreateModal]);
+        if (hasPipeline || isCreatingAnonymous || anonymousCreateAttempted) {
+            return;
+        }
+
+        setAnonymousCreateAttempted(true);
+        void handleCreateAnonymousPipeline();
+    }, [
+        hasDagPreview,
+        hasPipeline,
+        isCreatingAnonymous,
+        anonymousCreateAttempted,
+        handleCreateAnonymousPipeline,
+    ]);
 
     // No DAG preview and no pipeline - show welcome screen
     if (!hasDagPreview && !hasPipeline) {
@@ -187,151 +212,24 @@ export const PipelineView = () => {
         );
     }
 
-    const readyToCreatePipeline = (
-        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-green-50">
-            <div className="text-center max-w-md px-8">
-                <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg">
-                    <PlusCircle className="w-10 h-10 text-white" />
-                </div>
-                <h2 className="text-2xl font-semibold text-gray-800 mb-3">
-                    Ready to Create Pipeline
-                </h2>
-                <p className="text-gray-500 mb-8 leading-relaxed">
-                    Your DAG preview is ready! Create a pipeline to add derived columns,
-                    apply transformations, and train ML models on your data.
-                </p>
-
-                {!showCreateModal ? (
-                    <button
-                        onClick={() => setShowCreateModal(true)}
-                        className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-8 py-3 rounded-xl font-medium hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                    >
-                        <PlusCircle size={20} />
-                        Create Pipeline
-                    </button>
-                ) : (
-                    <div className="bg-white rounded-2xl shadow-2xl p-6 text-left border border-gray-100">
-                        <div className="flex items-center justify-between mb-6">
-                            <h4 className="font-semibold text-gray-800 text-lg">New Pipeline</h4>
-                            <button
-                                onClick={() => setShowCreateModal(false)}
-                                className="text-gray-400 hover:text-gray-600 transition-colors"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="space-y-5">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Pipeline Name
-                                </label>
-                                <input
-                                    type="text"
-                                    value={pipelineName}
-                                    onChange={(e) => setPipelineName(e.target.value)}
-                                    placeholder="e.g., Income Analysis Pipeline"
-                                    className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                                    autoFocus
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Random Seed
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={seed}
-                                        onChange={(e) => setSeed(parseInt(e.target.value) || 42)}
-                                        className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                                    />
-                                    <p className="text-xs text-gray-400 mt-1">
-                                        For reproducibility
-                                    </p>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Sample Size
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={sampleSize}
-                                        onChange={(e) => setSampleSize(parseInt(e.target.value) || 1000)}
-                                        min={1}
-                                        max={100000}
-                                        className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                                    />
-                                    <p className="text-xs text-gray-400 mt-1">1 - 100,000 rows</p>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-3 pt-4">
-                                <button
-                                    onClick={() => setShowCreateModal(false)}
-                                    className="flex-1 px-4 py-3 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleCreatePipeline}
-                                    disabled={isCreating || !pipelineName.trim()}
-                                    className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 py-3 rounded-lg text-sm font-medium hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                                >
-                                    {isCreating ? (
-                                        <>
-                                            <Loader2 size={16} className="animate-spin" />
-                                            Creating...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Play size={16} />
-                                            Create Pipeline
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-
-    // Has DAG preview but no pipeline - show tabs with Data/Models
+    // Has DAG preview but no pipeline - bootstrap anonymous pipeline automatically.
     if (hasDagPreview && !hasPipeline) {
         return (
-            <div className="w-full h-full flex flex-col bg-gray-50">
-                <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex gap-1">
-                            {subTabs.map((tab) => (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveSubTab(tab.id)}
-                                    className={`
-                                        flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 transition-colors
-                                        ${activeSubTab === tab.id
-                                            ? 'border-blue-500 text-blue-600'
-                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                                        }
-                                    `}
-                                >
-                                    {tab.icon}
-                                    {tab.label}
-                                </button>
-                            ))}
-                        </div>
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-green-50">
+                <div className="text-center max-w-md px-8">
+                    <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg">
+                        <Loader2 className="w-10 h-10 text-white animate-spin" />
                     </div>
-                </div>
-
-                <div className="flex-1 overflow-hidden">
-                    {activeSubTab === 'table' && readyToCreatePipeline}
-                    {activeSubTab === 'models' && (
-                        <div className="h-full overflow-y-auto">
-                            <ModelsPanel />
-                        </div>
+                    <h2 className="text-2xl font-semibold text-gray-800 mb-3">
+                        Preparing Anonymous Pipeline
+                    </h2>
+                    <p className="text-gray-500 leading-relaxed">
+                        Creating a scratch pipeline so you can transform data and fit models immediately.
+                    </p>
+                    {anonymousCreateError && (
+                        <p className="mt-4 text-sm text-red-600">
+                            Failed to initialize pipeline: {anonymousCreateError}
+                        </p>
                     )}
                 </div>
             </div>

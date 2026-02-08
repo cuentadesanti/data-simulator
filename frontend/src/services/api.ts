@@ -269,6 +269,23 @@ export interface VersionWithDAG extends ProjectVersion {
   dag_definition: DAGDefinition | null;
 }
 
+export interface ShareVersionResponse {
+  project_id: string;
+  version_id: string;
+  is_public: boolean;
+  share_token: string | null;
+  public_path: string | null;
+}
+
+export interface PublicDAGResponse {
+  project_id: string;
+  project_name: string;
+  version_id: string;
+  version_number: number;
+  shared_at: string;
+  dag_definition: DAGDefinition;
+}
+
 export const projectsApi = {
   /**
    * List all projects
@@ -360,6 +377,42 @@ export const projectsApi = {
    */
   setCurrentVersion: async (projectId: string, versionId: string): Promise<void> => {
     await api.post(`/api/projects/${projectId}/versions/${versionId}/set-current`);
+  },
+
+  /**
+   * Enable public sharing for a version.
+   */
+  shareVersion: async (
+    projectId: string,
+    versionId: string
+  ): Promise<ShareVersionResponse> => {
+    const response = await api.post<ShareVersionResponse>(
+      `/api/projects/${projectId}/versions/${versionId}/share`
+    );
+    return response.data;
+  },
+
+  /**
+   * Disable public sharing for a version.
+   */
+  unshareVersion: async (
+    projectId: string,
+    versionId: string
+  ): Promise<ShareVersionResponse> => {
+    const response = await api.delete<ShareVersionResponse>(
+      `/api/projects/${projectId}/versions/${versionId}/share`
+    );
+    return response.data;
+  },
+};
+
+export const publicApi = {
+  /**
+   * Fetch a shared DAG by public token.
+   */
+  getSharedDAG: async (shareToken: string): Promise<PublicDAGResponse> => {
+    const response = await api.get<PublicDAGResponse>(`/api/public/dags/${shareToken}`);
+    return response.data;
   },
 };
 

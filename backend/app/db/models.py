@@ -90,6 +90,8 @@ class DAGVersion(Base):
     )
     dag_definition: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     dag_diff: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    share_token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
     )

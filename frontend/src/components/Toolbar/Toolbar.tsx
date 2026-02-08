@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { CheckCircle, Download, Upload, Trash2, Save, ArrowUpRight } from 'lucide-react';
+import { CheckCircle, Download, Upload, Trash2, Save, ArrowUpRight, Share2 } from 'lucide-react';
 import { SignInButton, UserButton, useAuth } from '@clerk/clerk-react';
 import { useDAGStore, selectActiveMainTab } from '../../stores/dagStore';
 import { useProjectStore } from '../../stores/projectStore';
-import { dagApi, downloadBlob } from '../../services/api';
+import { dagApi, downloadBlob, projectsApi } from '../../services/api';
 import { useToast } from '../common';
 import { AddNodeDropdown } from './AddNodeDropdown';
 import { GenerateButton } from './GenerateButton';
@@ -23,6 +23,7 @@ export const Toolbar: React.FC = () => {
   const [versionName, setVersionName] = useState('');
   const [versionDescription, setVersionDescription] = useState('');
   const [versionNameError, setVersionNameError] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
   const { addToast } = useToast();
 
   const {
@@ -222,6 +223,40 @@ export const Toolbar: React.FC = () => {
     if (window.confirm('Are you sure you want to clear the entire DAG? This cannot be undone.')) {
       clearDAG();
       addToast('info', 'DAG cleared');
+    }
+  };
+
+  const handleShare = async () => {
+    if (!currentProjectId || !currentVersionId) {
+      addToast('error', 'Select and save a project version before sharing');
+      return;
+    }
+
+    setIsSharing(true);
+    try {
+      const share = await projectsApi.shareVersion(currentProjectId, currentVersionId);
+      if (!share.share_token) {
+        addToast('error', 'Failed to generate public share link');
+        return;
+      }
+
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const shareUrl = `${apiBase}${share.public_path ?? `/api/public/dags/${share.share_token}`}`;
+
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        addToast('success', 'Public DAG link copied to clipboard');
+      } catch {
+        addToast('info', `Public DAG link: ${shareUrl}`);
+      }
+    } catch (error) {
+      console.error('Share error:', error);
+      addToast(
+        'error',
+        `Share failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -435,6 +470,17 @@ export const Toolbar: React.FC = () => {
         >
           <Download size={16} />
           <span className="text-sm font-medium">Export JSON</span>
+        </button>
+
+        {/* Share DAG */}
+        <button
+          onClick={handleShare}
+          disabled={isSharing}
+          className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          title="Create a public read-only DAG link"
+        >
+          <Share2 size={16} />
+          <span className="text-sm font-medium">{isSharing ? 'Sharing...' : 'Share DAG'}</span>
         </button>
 
         {/* Import JSON */}

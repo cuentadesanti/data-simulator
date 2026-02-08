@@ -348,7 +348,10 @@ def list_models() -> ModelsListResponse:
             display_name=m["display_name"],
             description=m["description"],
             task_type=m["task_type"],
-            parameters=[ModelParameter(**p) for p in m["parameters"]],
+            parameters=[
+                ModelParameter(**{**p, "choices": p.get("choices") or []})
+                for p in m["parameters"]
+            ],
             icon=m.get("icon"),
             complexity=m.get("complexity"),
             coming_soon=m.get("coming_soon", False),

@@ -348,17 +348,28 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
     // Fetch versions for a project
     fetchVersions: async (projectId: string) => {
-      const versions = await projectsApi.listVersions(projectId);
+      try {
+        const versions = await projectsApi.listVersions(projectId);
 
-      // Update the project's versions in the list
-      set((state) => {
-        const project = state.projects.find((p) => p.id === projectId);
-        if (project) {
-          project.versions = versions;
-        }
-      });
+        // Update the project's versions in the list
+        set((state) => {
+          const project = state.projects.find((p) => p.id === projectId);
+          if (project) {
+            project.versions = versions;
+          }
+        });
 
-      return versions;
+        return versions;
+      } catch (error) {
+        // Avoid infinite "Loading versions..." UI state on failures.
+        set((state) => {
+          const project = state.projects.find((p) => p.id === projectId);
+          if (project) {
+            project.versions = [];
+          }
+        });
+        throw error;
+      }
     },
 
     // Set unsaved changes flag

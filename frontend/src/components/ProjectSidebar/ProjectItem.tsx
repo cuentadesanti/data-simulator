@@ -29,6 +29,7 @@ export function ProjectItem({ project }: ProjectItemProps) {
   const [editName, setEditName] = useState(project.name);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [versionsLoadError, setVersionsLoadError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -59,7 +60,12 @@ export function ProjectItem({ project }: ProjectItemProps) {
   // Fetch versions when expanded
   useEffect(() => {
     if (isExpanded && !project.versions) {
-      fetchVersions(project.id);
+      fetchVersions(project.id)
+        .then(() => setVersionsLoadError(null))
+        .catch((error) => {
+          console.error('Failed to load versions:', error);
+          setVersionsLoadError('Failed to load versions');
+        });
     }
   }, [isExpanded, project.id, project.versions, fetchVersions]);
 
@@ -223,7 +229,29 @@ export function ProjectItem({ project }: ProjectItemProps) {
               version={version}
               isSelected={currentVersionId === version.id}
             />
-          )) ?? <div className="px-3 py-2 text-xs text-gray-400">Loading versions...</div>}
+          )) ??
+            <div className="px-3 py-2 text-xs text-gray-400">Loading versions...</div>}
+          {project.versions && project.versions.length === 0 && versionsLoadError && (
+            <div className="px-3 py-2 text-xs text-red-500 space-y-1">
+              <div>{versionsLoadError}</div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fetchVersions(project.id)
+                    .then(() => setVersionsLoadError(null))
+                    .catch((error) => {
+                      console.error('Failed to reload versions:', error);
+                    });
+                }}
+                className="text-blue-600 hover:text-blue-700"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {project.versions && project.versions.length === 0 && !versionsLoadError && (
+            <div className="px-3 py-2 text-xs text-gray-400">No versions yet</div>
+          )}
         </div>
       )}
 
