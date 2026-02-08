@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     environment: str = "dev"  # dev, staging, prod
     clerk_secret_key: str = ""
 
+    # Auth - Clerk configuration
+    clerk_issuer: str = ""  # Expected issuer domain, e.g., "https://clerk.data-simulator.com"
+                             # Leave empty to accept any issuer (less secure, backward compatible)
+
     # CORS - comma-separated list of allowed origins, or "*" for all (default)
     # WARNING: "*" allows all origins. In production, set to your specific domain(s).
     # Example: "https://yourdomain.com,https://app.yourdomain.com"

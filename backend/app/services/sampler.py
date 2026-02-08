@@ -434,8 +434,9 @@ def _sample_deterministic_node(
         )
 
     # Import here to avoid circular dependencies
-    from simpleeval import EvalWithCompoundTypes
+    from simpleeval import EvalWithCompoundTypes, NameNotDefined
 
+    from app.core.exceptions import FormulaParseError, LookupKeyMissingError, UnknownVariableError
     from app.services.formula_parser import (
         ALLOWED_FUNCTIONS,
         NameResolver,
@@ -465,7 +466,32 @@ def _sample_deterministic_node(
 
         try:
             values[i] = evaluator.eval(expanded_formula)
+
+        # Preserve error semantics from parse_formula
+        except NameNotDefined as e:
+            # Variable not found - extract available variables
+            name_resolver = evaluator.names
+            if isinstance(name_resolver, NameResolver):
+                available = sorted(
+                    list(name_resolver.row_data.keys()) + list(name_resolver.all_names.keys())
+                )
+            else:
+                available = []
+            raise UnknownVariableError(str(e.name), available)
+
+        except (LookupKeyMissingError, UnknownVariableError):
+            # Re-raise our custom errors as-is
+            raise
+
+        except (SyntaxError, ValueError, TypeError, AttributeError, KeyError) as e:
+            # Syntax or evaluation error
+            raise FormulaParseError(
+                formula=node.formula,
+                error_msg=f"{type(e).__name__}: {str(e)}",
+            )
+
         except Exception as e:
+            # Catch-all for unexpected errors
             raise SampleError(
                 message=f"Formula evaluation failed for node '{node.id}' at row {i}: {str(e)}",
                 node_id=node.id,
