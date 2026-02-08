@@ -1,8 +1,4 @@
-/**
- * ModelsPanel component for training and viewing ML models.
- */
-
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Brain,
     Play,
@@ -10,111 +6,52 @@ import {
     ChevronDown,
     ChevronRight,
     Target,
-    BarChart3,
-    ArrowRight,
-    Settings,
     AlertCircle,
-    TrendingUp,
-    Shield,
-    Scissors,
-    GitMerge,
-    GitBranch,
-    Trees,
-    Zap,
-    Flame,
-    Users,
-    Box,
-    Minus,
-    Waves,
-    Target as TargetIcon,
-    Activity,
-    Circle,
+    Settings,
     Youtube,
-    ExternalLink,
-    HelpCircle,
     Save,
     FolderOpen,
     Trash2,
+    ExternalLink,
 } from 'lucide-react';
 import {
     modelingApi,
     ModelingAPIError,
     type FitResponse,
-    type ModelParamValue,
-    type ModelParameter,
     type ModelFitSummary,
-    type ModelingError,
+    type ModelParameter,
     type ModelParamChoiceValue,
+    type ModelParamValue,
+    type ModelingError,
 } from '../../api/modelingApi';
+import { Dropdown, type DropdownOption } from '../common';
 import {
     usePipelineStore,
-    selectPipelineSchema,
     selectCurrentVersionId,
+    selectPipelineSchema,
 } from '../../stores/pipelineStore';
 import {
     useModelingStore,
-    selectModelTypes,
     selectIsLoadingModelTypes,
-    selectSelectedModel,
     selectModelName,
     selectModelParams,
+    selectModelTypes,
     selectParamErrors,
-    selectTestSize,
-    selectTargetColumn,
+    selectSavedConfigs,
     selectSelectedFeatures,
+    selectSelectedModel,
     selectShowAdvanced,
     selectShowInternal,
-    selectSavedConfigs,
+    selectTargetColumn,
+    selectTestSize,
 } from '../../stores/modelingStore';
-import { Dropdown, type DropdownOption } from '../common';
+import { getAlwaysVisibleModelParams } from '../../stores/modelCoreParams';
+import type { PipelineDiagnosticsPayload } from './types';
 
-// Helper to map icon names to Lucide components
-const ModelIcon = ({
-    name,
-    size = 16,
-    className = '',
-}: {
-    name?: string;
-    size?: number;
+interface ModelsPanelProps {
     className?: string;
-}) => {
-    switch (name) {
-        case 'trending-up':
-            return <TrendingUp size={size} className={className} />;
-        case 'shield':
-            return <Shield size={size} className={className} />;
-        case 'scissors':
-            return <Scissors size={size} className={className} />;
-        case 'git-merge':
-            return <GitMerge size={size} className={className} />;
-        case 'git-branch':
-            return <GitBranch size={size} className={className} />;
-        case 'trees':
-            return <Trees size={size} className={className} />;
-        case 'zap':
-            return <Zap size={size} className={className} />;
-        case 'flame':
-            return <Flame size={size} className={className} />;
-        case 'users':
-            return <Users size={size} className={className} />;
-        case 'box':
-            return <Box size={size} className={className} />;
-        case 'minus':
-            return <Minus size={size} className={className} />;
-        case 'wave':
-            return <Waves size={size} className={className} />;
-        case 'target':
-            return <TargetIcon size={size} className={className} />;
-        case 'activity':
-            return <Activity size={size} className={className} />;
-        case 'circle':
-            return <Circle size={size} className={className} />;
-        case 'brain':
-            return <Brain size={size} className={className} />;
-        default:
-            return <Brain size={size} className={className} />;
-    }
-};
+    onDiagnosticsChange?: (payload: PipelineDiagnosticsPayload | null) => void;
+}
 
 const firstSentence = (text: string): string => {
     const trimmed = text.trim();
@@ -123,13 +60,6 @@ const firstSentence = (text: string): string => {
     }
     const match = trimmed.match(/^.*?[.!?](?:\s|$)/);
     return match?.[0]?.trim() ?? trimmed;
-};
-
-const getComplexityDots = (complexity?: number): number => {
-    if (!complexity || complexity <= 0) {
-        return 0;
-    }
-    return Math.max(1, Math.min(5, Math.ceil(complexity / 20)));
 };
 
 const getChoiceValue = (
@@ -142,11 +72,29 @@ const getChoiceValue = (
     if (choice === 'null') {
         return null;
     }
-    const matchedChoice = choices.find((candidate) => String(candidate) === choice);
-    return matchedChoice ?? choice;
+    const matched = choices.find((candidate) => String(candidate) === choice);
+    return matched ?? choice;
 };
 
-export const ModelsPanel = () => {
+const parseNumericType = (type: string): 'int' | 'float' | null => {
+    if (type === 'int' || type === 'integer') {
+        return 'int';
+    }
+    if (type === 'float' || type === 'number') {
+        return 'float';
+    }
+    return null;
+};
+
+const formatDate = (raw: string) => {
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) {
+        return raw;
+    }
+    return date.toLocaleString();
+};
+
+export const ModelsPanel = ({ className = '', onDiagnosticsChange }: ModelsPanelProps) => {
     const schema = usePipelineStore(selectPipelineSchema);
     const currentVersionId = usePipelineStore(selectCurrentVersionId);
 
@@ -176,27 +124,62 @@ export const ModelsPanel = () => {
     const loadConfig = useModelingStore((state) => state.loadConfig);
     const deleteConfig = useModelingStore((state) => state.deleteConfig);
 
-    // Fit results (transient state)
     const [isFitting, setIsFitting] = useState(false);
-    const [fitResult, setFitResult] = useState<FitResponse | null>(null);
     const [fitErrors, setFitErrors] = useState<ModelingError[]>([]);
+    const [fitResult, setFitResult] = useState<FitResponse | null>(null);
     const [fittedModels, setFittedModels] = useState<ModelFitSummary[]>([]);
-
-    // Saved configuration controls (transient UI state)
+    const [activeDiagnosticsModelId, setActiveDiagnosticsModelId] = useState<string | null>(null);
+    const [isLoadingDiagnostics, setIsLoadingDiagnostics] = useState(false);
+    const [diagnosticsCache, setDiagnosticsCache] = useState<Record<string, PipelineDiagnosticsPayload>>({});
     const [configName, setConfigName] = useState('');
     const [showSavedConfigs, setShowSavedConfigs] = useState(true);
+    const [showLearning, setShowLearning] = useState(false);
 
     useEffect(() => {
         fetchModelTypes();
     }, [fetchModelTypes]);
 
-    // Refresh fitted models when needed
+    const currentModelType = modelTypes.find((model) => model.name === selectedModel);
+    const alwaysVisibleParamNames = useMemo(
+        () => (currentModelType ? getAlwaysVisibleModelParams(currentModelType) : new Set<string>()),
+        [currentModelType]
+    );
+
+    const numericColumns = useMemo(
+        () => schema.filter((col) => col.dtype === 'float' || col.dtype === 'int'),
+        [schema]
+    );
+
+    const coreParams = useMemo(
+        () =>
+            currentModelType?.parameters.filter((param) =>
+                alwaysVisibleParamNames.has(param.name)
+            ) ?? [],
+        [alwaysVisibleParamNames, currentModelType]
+    );
+    const advancedParams = useMemo(
+        () =>
+            currentModelType?.parameters.filter(
+                (param) =>
+                    !alwaysVisibleParamNames.has(param.name) &&
+                    (param.ui_group === 'advanced' || !param.ui_group)
+            ) ?? [],
+        [alwaysVisibleParamNames, currentModelType]
+    );
+    const internalParams = useMemo(
+        () =>
+            currentModelType?.parameters.filter(
+                (param) =>
+                    !alwaysVisibleParamNames.has(param.name) && param.ui_group === 'internal'
+            ) ?? [],
+        [alwaysVisibleParamNames, currentModelType]
+    );
+
     const refreshFits = useCallback(async () => {
         if (!currentVersionId) {
             setFittedModels([]);
             return;
         }
-
         try {
             const fits = await modelingApi.listFits(currentVersionId);
             setFittedModels(fits);
@@ -209,12 +192,68 @@ export const ModelsPanel = () => {
         refreshFits();
     }, [refreshFits]);
 
-    // Get numeric columns for features/target
-    const numericColumns = schema.filter(
-        (col) => col.dtype === 'float' || col.dtype === 'int'
-    );
+    useEffect(() => {
+        setActiveDiagnosticsModelId(null);
+        setDiagnosticsCache({});
+    }, [currentVersionId]);
 
-    const currentModelType = modelTypes.find((model) => model.name === selectedModel);
+    const activeDiagnosticsPayload = activeDiagnosticsModelId
+        ? diagnosticsCache[activeDiagnosticsModelId] ?? null
+        : null;
+
+    useEffect(() => {
+        onDiagnosticsChange?.(activeDiagnosticsPayload);
+    }, [activeDiagnosticsPayload, onDiagnosticsChange]);
+
+    const loadDiagnosticsForModel = useCallback(
+        async (modelId: string) => {
+            if (!modelId) return;
+            if (diagnosticsCache[modelId]) {
+                setActiveDiagnosticsModelId(modelId);
+                return;
+            }
+
+            setIsLoadingDiagnostics(true);
+            try {
+                const detail = await modelingApi.getFit(modelId);
+                const prediction = await modelingApi.predict({
+                    model_id: modelId,
+                    pipeline_version_id: currentVersionId ?? undefined,
+                    limit: 1000,
+                });
+
+                const payload: PipelineDiagnosticsPayload = {
+                    modelId,
+                    modelName: detail.name,
+                    modelType: detail.model_type,
+                    targetColumn: detail.target_column ?? '',
+                    selectedFeatures: detail.feature_spec?.columns ?? [],
+                    metrics: detail.metrics,
+                    coefficients: detail.coefficients,
+                    diagnostics: detail.diagnostics,
+                    predictionRows: prediction.preview_rows_with_pred,
+                    createdAt: detail.created_at,
+                };
+
+                setDiagnosticsCache((prev) => ({ ...prev, [modelId]: payload }));
+                setActiveDiagnosticsModelId(modelId);
+            } catch (error) {
+                console.error('Failed to load model diagnostics:', error);
+                setFitErrors([
+                    {
+                        code: 'VALIDATION_ERROR',
+                        message:
+                            error instanceof Error
+                                ? error.message
+                                : 'Failed to load model diagnostics',
+                    },
+                ]);
+            } finally {
+                setIsLoadingDiagnostics(false);
+            }
+        },
+        [currentVersionId, diagnosticsCache]
+    );
 
     const handleUpdateParam = (name: string, value: ModelParamValue, type: string) => {
         updateParam(name, value, type);
@@ -235,7 +274,6 @@ export const ModelsPanel = () => {
             ]);
             return;
         }
-
         if (!targetColumn) {
             setFitErrors([
                 {
@@ -247,7 +285,6 @@ export const ModelsPanel = () => {
             ]);
             return;
         }
-
         if (selectedFeatures.length === 0) {
             setFitErrors([
                 {
@@ -259,15 +296,13 @@ export const ModelsPanel = () => {
             ]);
             return;
         }
-
-        // Check if there are any parameter errors
-        const hasErrors = Object.values(paramErrors).some((err) => !!err);
+        const hasErrors = Object.values(paramErrors).some((error) => !!error);
         if (hasErrors) {
             setFitErrors([
                 {
                     code: 'VALIDATION_ERROR',
                     message: 'Please fix hyperparameter errors before fitting',
-                    suggestion: 'Check the highlighted parameters above',
+                    suggestion: 'Review highlighted parameters in the tuning panel',
                 },
             ]);
             return;
@@ -291,9 +326,9 @@ export const ModelsPanel = () => {
                     random_state: 42,
                 },
             });
-
             setFitResult(result);
-            refreshFits();
+            await refreshFits();
+            await loadDiagnosticsForModel(result.model_id);
         } catch (error) {
             if (error instanceof ModelingAPIError) {
                 setFitErrors(error.errors);
@@ -314,81 +349,231 @@ export const ModelsPanel = () => {
         (model): DropdownOption<string> => ({
             value: model.name,
             label: `${model.display_name}${model.coming_soon ? ' (Coming Soon)' : ''}`,
-            icon: <ModelIcon name={model.icon} size={14} />,
             disabled: model.coming_soon,
             description: firstSentence(model.description),
         })
     );
+
+    const renderParam = (param: ModelParameter) => {
+        const hasError = !!paramErrors[param.name];
+        const value = modelParams[param.name];
+        const numericType = parseNumericType(param.type);
+        const isChoice = param.type === 'choice' && (param.choices ?? []).length > 0;
+        const isBoolean = param.type === 'boolean' || param.type === 'bool';
+        const choiceCount = (param.choices ?? []).length;
+        const canUseSegmentedChoices = isChoice && choiceCount > 0 && choiceCount <= 4;
+        const hasBounds = param.min_value !== null && param.min_value !== undefined && param.max_value !== null && param.max_value !== undefined;
+        const useSlider = !!numericType && hasBounds;
+
+        return (
+            <div key={param.name} className="space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                    <label className="text-xs font-medium text-gray-700">{param.display_name}</label>
+                    <span className="text-[10px] text-gray-400 font-mono">{param.type}</span>
+                </div>
+
+                {isBoolean ? (
+                    <label className="inline-flex items-center gap-2 text-xs text-gray-600">
+                        <input
+                            type="checkbox"
+                            checked={!!value}
+                            onChange={(event) =>
+                                handleUpdateParam(param.name, event.target.checked, param.type)
+                            }
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        Enabled
+                    </label>
+                ) : canUseSegmentedChoices ? (
+                    <div className="flex flex-wrap gap-1">
+                        {(param.choices ?? []).map((choice) => {
+                            const optionValue = choice === null ? 'null' : String(choice);
+                            const selected =
+                                (value === null ? 'null' : String(value ?? param.default)) === optionValue;
+                            return (
+                                <button
+                                    key={optionValue}
+                                    type="button"
+                                    onClick={() =>
+                                        handleUpdateParam(
+                                            param.name,
+                                            getChoiceValue(optionValue, param.choices),
+                                            param.type
+                                        )
+                                    }
+                                    className={`px-2 py-1 text-xs rounded border ${
+                                        selected
+                                            ? 'border-blue-400 bg-blue-50 text-blue-700'
+                                            : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    {optionValue === 'null' ? 'None' : optionValue}
+                                </button>
+                            );
+                        })}
+                    </div>
+                ) : isChoice ? (
+                    <Dropdown
+                        options={(param.choices ?? []).map((choice) => ({
+                            value: choice === null ? 'null' : String(choice),
+                            label: choice === null ? 'None' : String(choice),
+                        }))}
+                        value={value === null ? 'null' : String(value ?? param.default)}
+                        onChange={(next) =>
+                            handleUpdateParam(
+                                param.name,
+                                getChoiceValue(next, param.choices),
+                                param.type
+                            )
+                        }
+                        size="sm"
+                        error={hasError}
+                    />
+                ) : useSlider ? (
+                    <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="range"
+                                min={param.min_value ?? undefined}
+                                max={param.max_value ?? undefined}
+                                step={numericType === 'int' ? 1 : 0.01}
+                                value={typeof value === 'number' ? value : Number(param.default ?? 0)}
+                                onChange={(event) => {
+                                    const raw = event.target.value;
+                                    const parsed =
+                                        numericType === 'int'
+                                            ? parseInt(raw, 10)
+                                            : parseFloat(raw);
+                                    handleUpdateParam(param.name, parsed, param.type);
+                                }}
+                                className="flex-1 accent-blue-600"
+                            />
+                            <input
+                                type="number"
+                                min={param.min_value ?? undefined}
+                                max={param.max_value ?? undefined}
+                                step={numericType === 'int' ? 1 : 0.01}
+                                value={typeof value === 'number' ? value : Number(param.default ?? 0)}
+                                onChange={(event) => {
+                                    const raw = event.target.value;
+                                    const parsed =
+                                        numericType === 'int'
+                                            ? parseInt(raw, 10)
+                                            : parseFloat(raw);
+                                    handleUpdateParam(
+                                        param.name,
+                                        Number.isNaN(parsed) ? raw : parsed,
+                                        param.type
+                                    );
+                                }}
+                                className={`w-24 rounded border px-2 py-1 text-xs ${
+                                    hasError
+                                        ? 'border-red-300 bg-red-50'
+                                        : 'border-gray-300 bg-white'
+                                }`}
+                            />
+                        </div>
+                        {(param.recommended_min !== null && param.recommended_min !== undefined) ||
+                        (param.recommended_max !== null && param.recommended_max !== undefined) ? (
+                            <div className="text-[10px] text-gray-500">
+                                Recommended:{' '}
+                                {param.recommended_min ?? param.min_value} -{' '}
+                                {param.recommended_max ?? param.max_value}
+                            </div>
+                        ) : null}
+                    </div>
+                ) : (
+                    <input
+                        type={numericType ? 'number' : 'text'}
+                        step={numericType === 'int' ? '1' : '0.01'}
+                        value={
+                            typeof value === 'string' || typeof value === 'number'
+                                ? value
+                                : ''
+                        }
+                        onChange={(event) => {
+                            const raw = event.target.value;
+                            if (!numericType) {
+                                handleUpdateParam(param.name, raw, param.type);
+                                return;
+                            }
+                            const parsed =
+                                numericType === 'int'
+                                    ? parseInt(raw, 10)
+                                    : parseFloat(raw);
+                            handleUpdateParam(
+                                param.name,
+                                Number.isNaN(parsed) ? raw : parsed,
+                                param.type
+                            );
+                        }}
+                        placeholder={String(param.default ?? '')}
+                        className={`w-full rounded border px-2 py-1.5 text-xs ${
+                            hasError
+                                ? 'border-red-300 bg-red-50'
+                                : 'border-gray-300 bg-white'
+                        }`}
+                    />
+                )}
+
+                <p className="text-[10px] text-gray-500 leading-tight">{param.description}</p>
+                {hasError && (
+                    <p className="text-[10px] text-red-500 flex items-center gap-1">
+                        <AlertCircle size={10} />
+                        {paramErrors[param.name]}
+                    </p>
+                )}
+            </div>
+        );
+    };
 
     const isFitDisabled =
         !currentVersionId ||
         isFitting ||
         !targetColumn ||
         selectedFeatures.length === 0 ||
-        currentModelType?.coming_soon;
+        !!currentModelType?.coming_soon ||
+        modelOptions.length === 0;
 
     return (
-        <div className="bg-white border-l border-gray-200 w-80 flex flex-col h-full">
-            {/* Header */}
-            <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
-                <Brain size={16} className="text-purple-500" />
-                <h3 className="font-medium text-sm">Model Training</h3>
-            </div>
-
-            {/* Form */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {/* Model name */}
-                <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Model Name</label>
-                    <input
-                        type="text"
-                        value={modelName}
-                        onChange={(e) => setModelName(e.target.value)}
-                        placeholder="my_model"
-                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                </div>
-
-                {/* Model type selector */}
-                <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Model Type</label>
-                    <Dropdown
-                        options={modelOptions}
-                        value={selectedModel}
-                        onChange={setSelectedModel}
-                        disabled={isLoadingModelTypes || isFitting || modelOptions.length === 0}
-                        icon={<ModelIcon name={currentModelType?.icon} size={14} />}
-                        renderOption={(option, isSelected) => {
-                            const model = modelTypes.find((item) => item.name === option.value);
-                            const complexityDots = getComplexityDots(model?.complexity);
-                            const topTags = model?.tags?.slice(0, 2) ?? [];
-                            const videoCount = model?.video_links?.length ?? 0;
-
-                            return (
-                                <div
-                                    className={`
-                                        px-3 py-2 border-b border-gray-100 last:border-b-0
-                                        ${isSelected ? 'bg-purple-50 text-purple-700' : 'text-gray-700'}
-                                        ${option.disabled ? 'opacity-50' : 'hover:bg-gray-50'}
-                                        transition-colors
-                                    `}
-                                >
-                                    <div className="flex items-start gap-2">
-                                        <span className="text-purple-600 mt-0.5">{option.icon}</span>
-                                        <div className="flex-1 min-w-0">
+        <div className={`h-full overflow-y-auto ${className}`}>
+            <div className="space-y-4">
+                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                        <Brain size={16} className="text-blue-600" />
+                        <h3 className="text-sm font-semibold text-gray-800">Model Configuration</h3>
+                    </div>
+                    <div className="space-y-3">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                                Model Type
+                            </label>
+                            <Dropdown
+                                options={modelOptions}
+                                value={selectedModel}
+                                onChange={setSelectedModel}
+                                disabled={isLoadingModelTypes || isFitting || modelOptions.length === 0}
+                                renderOption={(option, isSelected) => {
+                                    const model = modelTypes.find((item) => item.name === option.value);
+                                    return (
+                                        <div
+                                            className={`px-3 py-2 border-b border-gray-100 last:border-b-0 ${
+                                                isSelected ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+                                            } ${option.disabled ? 'opacity-50' : 'hover:bg-gray-50'}`}
+                                        >
                                             <div className="text-sm font-medium truncate">{option.label}</div>
                                             {option.description && (
-                                                <div className="text-[11px] text-gray-500 leading-tight mt-0.5">
+                                                <div className="text-[11px] text-gray-500 mt-0.5 leading-tight">
                                                     {option.description}
                                                 </div>
                                             )}
-                                            <div className="flex flex-wrap gap-1 mt-1.5">
+                                            <div className="flex flex-wrap gap-1 mt-1">
                                                 {model?.category && (
-                                                    <span className="text-[10px] uppercase tracking-wide bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                                                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded uppercase tracking-wide">
                                                         {model.category}
                                                     </span>
                                                 )}
-                                                {topTags.map((tag) => (
+                                                {(model?.tags ?? []).slice(0, 2).map((tag) => (
                                                     <span
                                                         key={tag}
                                                         className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded"
@@ -398,369 +583,261 @@ export const ModelsPanel = () => {
                                                 ))}
                                             </div>
                                         </div>
-                                        <div className="flex flex-col items-end gap-1 pt-0.5">
-                                            {complexityDots > 0 && (
-                                                <div className="flex gap-0.5">
-                                                    {[1, 2, 3, 4, 5].map((i) => (
-                                                        <div
-                                                            key={i}
-                                                            className={`h-1.5 w-1.5 rounded-full ${i <= complexityDots ? 'bg-purple-400' : 'bg-gray-200'}`}
-                                                        />
-                                                    ))}
-                                                </div>
-                                            )}
-                                            {videoCount > 0 && (
-                                                <div className="flex items-center gap-1 text-[10px] text-red-500">
-                                                    <Youtube size={10} />
-                                                    {videoCount}
+                                    );
+                                }}
+                            />
+                            {isLoadingModelTypes && (
+                                <p className="text-[11px] text-gray-400 mt-1">Loading model catalog...</p>
+                            )}
+                            {!isLoadingModelTypes && modelOptions.length === 0 && (
+                                <p className="text-[11px] text-red-500 mt-1">Model catalog unavailable.</p>
+                            )}
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                                Model Name
+                            </label>
+                            <input
+                                type="text"
+                                value={modelName}
+                                onChange={(event) => setModelName(event.target.value)}
+                                placeholder="my_model"
+                                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                        <Target size={14} className="text-blue-600" />
+                        <h4 className="text-sm font-semibold text-gray-800">Training Data Setup</h4>
+                    </div>
+
+                    {!currentVersionId ? (
+                        <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700">
+                            Create a pipeline first to pick target/features and fit models.
+                        </div>
+                    ) : (
+                        <>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Target Column
+                                </label>
+                                <Dropdown
+                                    options={[
+                                        { value: '', label: 'Select target...' },
+                                        ...numericColumns.map((column) => ({
+                                            value: column.name,
+                                            label: column.name,
+                                        })),
+                                    ]}
+                                    value={targetColumn}
+                                    onChange={setTargetColumn}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Feature Columns ({selectedFeatures.length})
+                                </label>
+                                <div className="max-h-40 overflow-y-auto rounded border border-gray-200">
+                                    {numericColumns
+                                        .filter((column) => column.name !== targetColumn)
+                                        .map((column) => (
+                                            <label
+                                                key={column.name}
+                                                className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 cursor-pointer"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedFeatures.includes(column.name)}
+                                                    onChange={() => toggleFeature(column.name)}
+                                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                />
+                                                <span>{column.name}</span>
+                                                <span className="text-xs text-gray-400 ml-auto">
+                                                    {column.dtype}
+                                                </span>
+                                            </label>
+                                        ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Test Size: {(testSize * 100).toFixed(0)}%
+                                </label>
+                                <input
+                                    type="range"
+                                    min="0.1"
+                                    max="0.4"
+                                    step="0.05"
+                                    value={testSize}
+                                    onChange={(event) => setTestSize(parseFloat(event.target.value))}
+                                    className="w-full accent-blue-600"
+                                />
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                        <Settings size={14} className="text-blue-600" />
+                        <h4 className="text-sm font-semibold text-gray-800">Core Hyperparameters</h4>
+                    </div>
+                    {coreParams.length === 0 ? (
+                        <p className="text-xs text-gray-500">No core parameters for this model.</p>
+                    ) : (
+                        <div className="space-y-3">{coreParams.map(renderParam)}</div>
+                    )}
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+                    <button
+                        type="button"
+                        onClick={handleFit}
+                        disabled={isFitDisabled}
+                        className="w-full flex items-center justify-center gap-2 rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                    >
+                        {isFitting ? (
+                            <>
+                                <Loader2 size={14} className="animate-spin" />
+                                Fitting...
+                            </>
+                        ) : currentModelType?.coming_soon ? (
+                            <>Coming Soon</>
+                        ) : (
+                            <>
+                                <Play size={14} />
+                                Fit Model
+                            </>
+                        )}
+                    </button>
+
+                    {isLoadingDiagnostics && (
+                        <div className="text-xs text-gray-500 flex items-center gap-1">
+                            <Loader2 size={12} className="animate-spin" />
+                            Loading diagnostics...
+                        </div>
+                    )}
+                    {activeDiagnosticsPayload && (
+                        <div className="rounded-md bg-blue-50 border border-blue-200 px-2.5 py-2 text-xs text-blue-700">
+                            Diagnostics synced for <strong>{activeDiagnosticsPayload.modelName}</strong>
+                            {activeDiagnosticsPayload.createdAt ? (
+                                <> ({formatDate(activeDiagnosticsPayload.createdAt)})</>
+                            ) : null}
+                        </div>
+                    )}
+
+                    {fitErrors.length > 0 && (
+                        <div className="rounded-md border border-red-200 bg-red-50 p-3 space-y-2">
+                            {fitErrors.map((error, index) => (
+                                <div key={`${error.code}-${index}`} className="text-xs text-red-700">
+                                    <div className="flex items-start gap-1.5">
+                                        <AlertCircle size={12} className="mt-0.5" />
+                                        <div>
+                                            <div>{error.message}</div>
+                                            {error.suggestion && (
+                                                <div className="text-red-600 mt-0.5">
+                                                    Tip: {error.suggestion}
                                                 </div>
                                             )}
                                         </div>
                                     </div>
                                 </div>
-                            );
-                        }}
-                    />
-                    {isLoadingModelTypes && (
-                        <p className="text-[11px] text-gray-400 mt-1">Loading model catalog...</p>
-                    )}
-                    {!isLoadingModelTypes && modelOptions.length === 0 && (
-                        <p className="text-[11px] text-red-500 mt-1">Model catalog unavailable.</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-1">
-                        {currentModelType && (
-                            <p className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium uppercase tracking-wider">
-                                {currentModelType.task_type}
-                            </p>
-                        )}
-                        {currentModelType?.complexity && (
-                            <div className="flex items-center gap-1 text-[10px] text-gray-400">
-                                <span>Complexity:</span>
-                                <div className="flex gap-0.5">
-                                    {[1, 2, 3, 4, 5].map((i) => (
-                                        <div
-                                            key={i}
-                                            className={`h-1 w-2 rounded-full ${
-                                                i <= getComplexityDots(currentModelType?.complexity)
-                                                    ? 'bg-purple-400'
-                                                    : 'bg-gray-200'
-                                            }`}
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Video Links / Educational Resources */}
-                {currentModelType?.video_links && currentModelType.video_links.length > 0 && (
-                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-2">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 uppercase tracking-wider">
-                            <Youtube size={12} />
-                            Learning Resources
-                        </div>
-                        <div className="space-y-1.5">
-                            {currentModelType.video_links.map((link, idx) => (
-                                <a
-                                    key={idx}
-                                    href={link.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center justify-between group p-1.5 bg-white border border-blue-200 rounded-md hover:border-blue-400 transition-colors"
-                                >
-                                    <span className="text-[11px] text-gray-700 truncate pr-2">
-                                        {link.title}
-                                    </span>
-                                    <ExternalLink
-                                        size={10}
-                                        className="text-blue-400 group-hover:text-blue-600 flex-shrink-0"
-                                    />
-                                </a>
                             ))}
                         </div>
-                        <p className="text-[10px] text-blue-500 italic flex items-center gap-1">
-                            <HelpCircle size={10} />
-                            Clearly explained by StatQuest
-                        </p>
+                    )}
+
+                    {fitResult && (
+                        <div className="rounded-md border border-green-200 bg-green-50 px-2.5 py-2 text-xs text-green-700">
+                            Model fitted successfully. Metrics and diagnostics are available in the
+                            analysis pane.
+                        </div>
+                    )}
+                </div>
+
+                {advancedParams.length > 0 && (
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                        <button
+                            type="button"
+                            onClick={() => setShowAdvanced(!showAdvanced)}
+                            className="flex items-center gap-1.5 text-sm font-semibold text-gray-700"
+                        >
+                            {showAdvanced ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            Advanced Parameters ({advancedParams.length})
+                        </button>
+                        {showAdvanced && <div className="space-y-3 mt-3">{advancedParams.map(renderParam)}</div>}
                     </div>
                 )}
 
-                {/* Model Parameters */}
-                {currentModelType && currentModelType.parameters.length > 0 &&
-                    (() => {
-                        const coreParams = currentModelType.parameters.filter(
-                            (param) => param.ui_group === 'core'
-                        );
-                        const advancedParams = currentModelType.parameters.filter(
-                            (param) => param.ui_group === 'advanced' || !param.ui_group
-                        );
-                        const internalParams = currentModelType.parameters.filter(
-                            (param) => param.ui_group === 'internal'
-                        );
+                {internalParams.length > 0 && (
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                        <button
+                            type="button"
+                            onClick={() => setShowInternal(!showInternal)}
+                            className="flex items-center gap-1.5 text-sm font-semibold text-gray-700"
+                        >
+                            {showInternal ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            Internal Parameters ({internalParams.length})
+                        </button>
+                        {showInternal && <div className="space-y-3 mt-3">{internalParams.map(renderParam)}</div>}
+                    </div>
+                )}
 
-                        const renderParam = (param: ModelParameter) => {
-                            const hasError = !!paramErrors[param.name];
-                            const isChoice =
-                                param.type === 'choice' &&
-                                param.choices &&
-                                param.choices.length > 0;
-                            const isBoolean = param.type === 'boolean' || param.type === 'bool';
-                            const textParamValue = modelParams[param.name];
-                            const inputValue: string | number =
-                                typeof textParamValue === 'string' ||
-                                typeof textParamValue === 'number'
-                                    ? textParamValue
-                                    : '';
-
-                            return (
-                                <div key={param.name}>
-                                    <div className="flex justify-between items-center mb-1">
-                                        <label className="text-xs font-medium text-gray-700">
-                                            {param.display_name}
-                                        </label>
-                                        <span
-                                            className={`text-[10px] font-mono italic ${
-                                                hasError ? 'text-red-500' : 'text-gray-400'
-                                            }`}
-                                        >
-                                            {param.type}
-                                        </span>
-                                    </div>
-
-                                    {isBoolean ? (
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={!!modelParams[param.name]}
-                                                onChange={(e) =>
-                                                    handleUpdateParam(
-                                                        param.name,
-                                                        e.target.checked,
-                                                        param.type
-                                                    )
-                                                }
-                                                className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                            />
-                                            <span className="text-xs text-gray-500">Enabled</span>
-                                        </label>
-                                    ) : isChoice ? (
-                                        <Dropdown
-                                            options={(param.choices ?? []).map(
-                                                (choice): DropdownOption<string> => ({
-                                                    value:
-                                                        choice === null
-                                                            ? 'null'
-                                                            : String(choice),
-                                                    label:
-                                                        choice === null
-                                                            ? 'None'
-                                                            : String(choice),
-                                                })
-                                            )}
-                                            value={
-                                                modelParams[param.name] === null
-                                                    ? 'null'
-                                                    : String(
-                                                          modelParams[param.name] ?? param.default
-                                                      )
-                                            }
-                                            onChange={(val) => {
-                                                handleUpdateParam(
-                                                    param.name,
-                                                    getChoiceValue(val, param.choices),
-                                                    param.type
-                                                );
-                                            }}
-                                            size="sm"
-                                            error={hasError}
-                                        />
-                                    ) : (
-                                        <>
-                                            <input
-                                                type={
-                                                    param.type === 'int' ||
-                                                    param.type === 'integer' ||
-                                                    param.type === 'float' ||
-                                                    param.type === 'number'
-                                                        ? 'number'
-                                                        : 'text'
-                                                }
-                                                step={
-                                                    param.type === 'float' ||
-                                                    param.type === 'number'
-                                                        ? '0.01'
-                                                        : '1'
-                                                }
-                                                value={
-                                                    inputValue
-                                                }
-                                                onChange={(e) => {
-                                                    const val = e.target.value;
-                                                    const isNumeric =
-                                                        param.type === 'int' ||
-                                                        param.type === 'integer' ||
-                                                        param.type === 'float' ||
-                                                        param.type === 'number';
-                                                    const parsed = isNumeric
-                                                        ? param.type === 'int' ||
-                                                          param.type === 'integer'
-                                                            ? parseInt(val, 10)
-                                                            : parseFloat(val)
-                                                        : val;
-                                                    const finalValue =
-                                                        isNumeric && Number.isNaN(parsed)
-                                                            ? val
-                                                            : (parsed as ModelParamValue);
-                                                    handleUpdateParam(
-                                                        param.name,
-                                                        finalValue,
-                                                        param.type
-                                                    );
-                                                }}
-                                                placeholder={String(param.default)}
-                                                className={`w-full border rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-1 ${
-                                                    hasError
-                                                        ? 'border-red-300 bg-red-50 focus:ring-red-500'
-                                                        : 'border-gray-300 focus:ring-purple-500'
-                                                }`}
-                                            />
-                                            {hasError && (
-                                                <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1">
-                                                    <AlertCircle size={10} />
-                                                    {paramErrors[param.name]}
-                                                </p>
-                                            )}
-                                        </>
-                                    )}
-                                    <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">
-                                        {param.description}
-                                    </p>
-                                </div>
-                            );
-                        };
-
-                        return (
-                            <div className="bg-gray-50 rounded-lg p-3 border border-gray-100 space-y-3">
-                                <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                                    <Settings size={12} />
-                                    Hyperparameters
-                                </div>
-
-                                {/* Core Parameters - Always visible */}
-                                {coreParams.length > 0 && (
-                                    <div className="space-y-3">{coreParams.map(renderParam)}</div>
-                                )}
-
-                                {/* Advanced Parameters - Collapsible */}
-                                {advancedParams.length > 0 && (
-                                    <div className="border-t border-gray-200 pt-2 mt-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowAdvanced(!showAdvanced)}
-                                            className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 w-full"
-                                        >
-                                            {showAdvanced ? (
-                                                <ChevronDown size={12} />
-                                            ) : (
-                                                <ChevronRight size={12} />
-                                            )}
-                                            Advanced ({advancedParams.length})
-                                        </button>
-                                        {showAdvanced && (
-                                            <div className="space-y-3 mt-2">
-                                                {advancedParams.map(renderParam)}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Internal Parameters - Collapsible */}
-                                {internalParams.length > 0 && (
-                                    <div className="border-t border-gray-200 pt-2 mt-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowInternal(!showInternal)}
-                                            className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-gray-600 w-full"
-                                        >
-                                            {showInternal ? (
-                                                <ChevronDown size={12} />
-                                            ) : (
-                                                <ChevronRight size={12} />
-                                            )}
-                                            Internal ({internalParams.length})
-                                        </button>
-                                        {showInternal && (
-                                            <div className="space-y-3 mt-2">
-                                                {internalParams.map(renderParam)}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })()}
-
-                {/* Save configuration */}
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100 space-y-2">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        <Save size={12} />
+                <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-700">
+                        <Save size={14} />
                         Save Configuration
                     </div>
                     <div className="flex gap-2">
                         <input
                             type="text"
                             value={configName}
-                            onChange={(e) => setConfigName(e.target.value)}
+                            onChange={(event) => setConfigName(event.target.value)}
                             placeholder="e.g. baseline_linear"
-                            className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-xs"
                         />
                         <button
                             type="button"
                             onClick={handleSaveConfig}
                             disabled={!configName.trim()}
-                            className="px-2.5 py-1.5 text-xs font-medium rounded-md bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-2.5 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                         >
                             Save
                         </button>
                     </div>
                 </div>
 
-                {/* Saved configurations */}
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                <div className="rounded-xl border border-gray-200 bg-white p-4">
                     <button
                         type="button"
                         onClick={() => setShowSavedConfigs(!showSavedConfigs)}
-                        className="flex items-center justify-between w-full text-left"
+                        className="w-full flex items-center justify-between"
                     >
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            <FolderOpen size={12} />
+                        <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-700">
+                            <FolderOpen size={14} />
                             Saved Configurations ({savedConfigs.length})
                         </div>
-                        {showSavedConfigs ? (
-                            <ChevronDown size={12} className="text-gray-400" />
-                        ) : (
-                            <ChevronRight size={12} className="text-gray-400" />
-                        )}
+                        {showSavedConfigs ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </button>
-
                     {showSavedConfigs && (
-                        <div className="mt-2 space-y-2">
+                        <div className="mt-3 space-y-2">
                             {savedConfigs.length === 0 ? (
-                                <p className="text-xs text-gray-400">No saved configurations yet.</p>
+                                <p className="text-xs text-gray-500">No saved configurations yet.</p>
                             ) : (
                                 savedConfigs.map((config) => (
-                                    <div
-                                        key={config.id}
-                                        className="bg-white border border-gray-200 rounded-md p-2"
-                                    >
+                                    <div key={config.id} className="rounded border border-gray-200 p-2">
                                         <div className="flex items-start justify-between gap-2">
                                             <div className="min-w-0">
                                                 <div className="text-xs font-medium text-gray-700 truncate">
                                                     {config.name}
                                                 </div>
-                                                <div className="text-[10px] text-gray-400 mt-0.5">
-                                                    {new Date(config.createdAt).toLocaleString()}
+                                                <div className="text-[10px] text-gray-500">
+                                                    {formatDate(config.createdAt)}
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-1">
@@ -782,8 +859,7 @@ export const ModelsPanel = () => {
                                             </div>
                                         </div>
                                         <div className="mt-1 text-[10px] text-gray-500">
-                                            {config.selectedModel} | {config.selectedFeatures.length}{' '}
-                                            features
+                                            {config.selectedModel} | {config.selectedFeatures.length} features
                                         </div>
                                     </div>
                                 ))
@@ -792,274 +868,67 @@ export const ModelsPanel = () => {
                     )}
                 </div>
 
-                {/* Pipeline-dependent controls */}
-                {currentVersionId && (
-                    <>
-                        {/* Target column */}
-                        <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
-                                <Target size={12} />
-                                Target Column
-                            </label>
-                            <Dropdown
-                                options={[
-                                    { value: '', label: 'Select target...' },
-                                    ...numericColumns.map(
-                                        (col): DropdownOption<string> => ({
-                                            value: col.name,
-                                            label: col.name,
-                                        })
-                                    ),
-                                ]}
-                                value={targetColumn}
-                                onChange={setTargetColumn}
-                                placeholder="Select target..."
-                            />
+                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                    <button
+                        type="button"
+                        onClick={() => setShowLearning(!showLearning)}
+                        className="w-full flex items-center justify-between"
+                    >
+                        <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-700">
+                            <Youtube size={14} className="text-red-500" />
+                            Learning Materials
                         </div>
-
-                        {/* Feature columns */}
-                        <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                                Feature Columns ({selectedFeatures.length} selected)
-                            </label>
-                            <div className="border border-gray-200 rounded-md max-h-40 overflow-y-auto">
-                                {numericColumns
-                                    .filter((col) => col.name !== targetColumn)
-                                    .map((col) => (
-                                        <label
-                                            key={col.name}
-                                            className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer"
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedFeatures.includes(col.name)}
-                                                onChange={() => toggleFeature(col.name)}
-                                                className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                            />
-                                            <span className="text-sm">{col.name}</span>
-                                            <span className="text-xs text-gray-400 ml-auto">
-                                                {col.dtype}
-                                            </span>
-                                        </label>
-                                    ))}
-                            </div>
-                        </div>
-
-                        {/* Test size */}
-                        <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                                Test Size: {(testSize * 100).toFixed(0)}%
-                            </label>
-                            <input
-                                type="range"
-                                min="0.1"
-                                max="0.4"
-                                step="0.05"
-                                value={testSize}
-                                onChange={(e) => setTestSize(parseFloat(e.target.value))}
-                                className="w-full accent-purple-600"
-                            />
-                        </div>
-                    </>
-                )}
-
-                {!currentVersionId && (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700">
-                        Create a pipeline first to select target/features and fit a model.
-                    </div>
-                )}
-
-                {/* Fit button */}
-                <button
-                    onClick={handleFit}
-                    disabled={isFitDisabled}
-                    className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                    {isFitting ? (
-                        <>
-                            <Loader2 size={14} className="animate-spin" />
-                            Fitting...
-                        </>
-                    ) : !currentVersionId ? (
-                        <>Create a pipeline first</>
-                    ) : currentModelType?.coming_soon ? (
-                        <>Coming Soon</>
-                    ) : (
-                        <>
-                            <Play size={14} />
-                            Fit Model
-                        </>
-                    )}
-                </button>
-
-                {/* Errors */}
-                {fitErrors.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded-md p-3 space-y-2">
-                        {fitErrors.map((error, idx) => (
-                            <div key={idx} className="text-sm">
-                                <div className="flex items-start gap-2">
-                                    <AlertCircle
-                                        size={14}
-                                        className="text-red-500 mt-0.5 flex-shrink-0"
-                                    />
-                                    <div className="flex-1">
-                                        <div className="text-red-700 font-medium">
-                                            {error.message}
-                                        </div>
-                                        {error.suggestion && (
-                                            <div className="text-red-600 text-xs mt-1">
-                                                Tip: {error.suggestion}
-                                            </div>
-                                        )}
-                                        {error.field && (
-                                            <div className="text-red-500 text-xs mt-1 font-mono">
-                                                Field: {error.field}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {/* Results */}
-                {fitResult && (
-                    <div className="bg-green-50 border border-green-200 rounded-md p-3 space-y-3">
-                        <div className="flex items-center gap-2 text-green-700 font-medium text-sm">
-                            <BarChart3 size={14} />
-                            Model Fitted Successfully
-                        </div>
-
-                        {/* Metrics */}
-                        <div>
-                            <h4 className="text-xs font-medium text-gray-600 mb-1">Metrics</h4>
-                            <div className="grid grid-cols-2 gap-1 text-xs">
-                                {Object.entries(fitResult.metrics).map(([key, value]) => (
-                                    <div
-                                        key={key}
-                                        className="flex justify-between items-center bg-white rounded px-2 py-1"
+                        {showLearning ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    {showLearning && (
+                        <div className="mt-3 space-y-2">
+                            {currentModelType?.video_links && currentModelType.video_links.length > 0 ? (
+                                currentModelType.video_links.map((link, index) => (
+                                    <a
+                                        key={`${link.url}-${index}`}
+                                        href={link.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center justify-between gap-2 rounded border border-blue-200 bg-blue-50 px-2.5 py-2 hover:bg-blue-100"
                                     >
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-gray-500">{key}:</span>
-                                            {key.toLowerCase() === 'r2' && (
-                                                <a
-                                                    href="https://youtube.com/watch?v=2AQKmw14mHM"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    title="R-squared, Clearly Explained"
-                                                    className="text-red-500 hover:text-red-600 transition-colors"
-                                                >
-                                                    <Youtube size={10} />
-                                                </a>
-                                            )}
-                                        </div>
-                                        <span className="font-mono text-gray-700">
-                                            {typeof value === 'number'
-                                                ? value.toFixed(4)
-                                                : value}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
+                                        <span className="text-xs text-blue-800 truncate">{link.title}</span>
+                                        <ExternalLink size={11} className="text-blue-600" />
+                                    </a>
+                                ))
+                            ) : (
+                                <p className="text-xs text-gray-500">
+                                    Select a model with learning resources to see curated material.
+                                </p>
+                            )}
                         </div>
+                    )}
+                </div>
 
-                        {/* Coefficients */}
-                        {fitResult.coefficients && (
-                            <div>
-                                <h4 className="text-xs font-medium text-gray-600 mb-1">
-                                    Coefficients
-                                </h4>
-                                <div className="space-y-1 text-xs">
-                                    {Object.entries(fitResult.coefficients).map(([key, value]) => (
-                                        <div
-                                            key={key}
-                                            className="flex items-center gap-2 bg-white rounded px-2 py-1"
-                                        >
-                                            <span className="text-gray-500 truncate flex-1">
-                                                {key}
-                                            </span>
-                                            <ArrowRight
-                                                size={10}
-                                                className="text-gray-300"
-                                            />
-                                            <span className="font-mono">
-                                                {typeof value === 'number'
-                                                    ? value.toFixed(4)
-                                                    : value}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Fitted Models List */}
                 {fittedModels.length > 0 && (
-                    <div className="pt-4 border-t border-gray-100">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                            <BarChart3 size={12} />
-                            Fitted Models ({fittedModels.length})
-                        </div>
-                        <div className="space-y-2">
-                            {fittedModels.map((model) => (
-                                <div
-                                    key={model.id}
-                                    className="p-2 border border-gray-200 rounded-md hover:border-purple-300 hover:bg-purple-50 transition-colors group"
+                    <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-2">
+                        <h4 className="text-sm font-semibold text-gray-800">
+                            Existing Fits ({fittedModels.length})
+                        </h4>
+                        {fittedModels.map((fit) => {
+                            const active = fit.id === activeDiagnosticsModelId;
+                            return (
+                                <button
+                                    key={fit.id}
+                                    type="button"
+                                    onClick={() => void loadDiagnosticsForModel(fit.id)}
+                                    className={`w-full text-left rounded border px-2.5 py-2 ${
+                                        active
+                                            ? 'border-blue-300 bg-blue-50'
+                                            : 'border-gray-200 bg-white hover:border-blue-200'
+                                    }`}
                                 >
-                                    <div className="flex justify-between items-start mb-1">
-                                        <div className="text-sm font-medium text-gray-800 truncate pr-2">
-                                            {model.name}
-                                        </div>
-                                        <div className="text-[10px] text-gray-400 whitespace-nowrap">
-                                            {new Date(model.created_at).toLocaleDateString()}
-                                        </div>
+                                    <div className="text-xs font-medium text-gray-700 truncate">{fit.name}</div>
+                                    <div className="text-[10px] text-gray-500 mt-0.5">
+                                        {fit.model_type} | {formatDate(fit.created_at)}
                                     </div>
-                                    <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                                        <span className="bg-gray-100 px-1 rounded">
-                                            {model.model_type}
-                                        </span>
-                                        <span>•</span>
-                                        <span>
-                                            Target:{' '}
-                                            <span className="text-gray-700">
-                                                {model.target_column}
-                                            </span>
-                                        </span>
-                                    </div>
-                                    <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1">
-                                        {Object.entries(model.metrics).map(([key, value]) => (
-                                            <div
-                                                key={key}
-                                                className="flex justify-between items-center text-[10px]"
-                                            >
-                                                <div className="flex items-center gap-1">
-                                                    <span className="text-gray-400 capitalize">
-                                                        {key}:
-                                                    </span>
-                                                    {key.toLowerCase() === 'r2' && (
-                                                        <a
-                                                            href="https://youtube.com/watch?v=2AQKmw14mHM"
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            title="R-squared, Clearly Explained"
-                                                            className="text-red-400 hover:text-red-600 transition-colors"
-                                                        >
-                                                            <Youtube size={8} />
-                                                        </a>
-                                                    )}
-                                                </div>
-                                                <span className="font-mono font-medium text-gray-600">
-                                                    {value.toFixed(3)}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                                </button>
+                            );
+                        })}
                     </div>
                 )}
             </div>

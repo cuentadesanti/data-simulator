@@ -70,6 +70,31 @@ class AddStepResponse(BaseModel):
     warnings: int
 
 
+class PipelineVersionMutationResponse(BaseModel):
+    """Response schema for step delete/reorder operations."""
+
+    new_version_id: str
+    schema: list[dict[str, Any]]
+    preview_rows: list[dict[str, Any]]
+    warnings: int
+    steps: list[dict[str, Any]]
+    lineage: list[dict[str, Any]]
+
+
+class DeleteStepResponse(PipelineVersionMutationResponse):
+    """Response schema for deleting a step."""
+
+    removed_step_ids: list[str]
+    affected_columns: list[str]
+
+
+class ReorderStepsRequest(BaseModel):
+    """Request schema for reordering transform steps."""
+
+    step_ids: list[str] = Field(..., min_length=1, description="Ordered list of step IDs")
+    preview_limit: int = Field(200, ge=1, le=1000, description="Preview row limit")
+
+
 class MaterializeResponse(BaseModel):
     """Response schema for materialization."""
     
@@ -209,6 +234,75 @@ def add_step(
             added_columns=result["added_columns"],
             preview_rows=result["preview_rows"],
             warnings=result["warnings"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post(
+    "/{pipeline_id}/versions/{version_id}/steps/reorder",
+    response_model=PipelineVersionMutationResponse,
+)
+def reorder_steps(
+    pipeline_id: str,
+    version_id: str,
+    request: ReorderStepsRequest,
+    db: Session = Depends(get_db),
+) -> PipelineVersionMutationResponse:
+    """Reorder transform steps, creating a new pipeline version."""
+    try:
+        result = pipeline_service.reorder_steps(
+            db=db,
+            pipeline_id=pipeline_id,
+            version_id=version_id,
+            step_ids=request.step_ids,
+            preview_limit=request.preview_limit,
+        )
+        return PipelineVersionMutationResponse(**result)
+    except pipeline_service.PipelineDependencyConflictError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": str(e),
+                "affected_step_ids": e.affected_step_ids,
+                "affected_columns": e.affected_columns,
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete(
+    "/{pipeline_id}/versions/{version_id}/steps/{step_id}",
+    response_model=DeleteStepResponse,
+)
+def delete_step(
+    pipeline_id: str,
+    version_id: str,
+    step_id: str,
+    cascade: bool = Query(False, description="Whether to remove downstream dependent steps"),
+    preview_limit: int = Query(200, ge=1, le=1000, description="Preview row limit"),
+    db: Session = Depends(get_db),
+) -> DeleteStepResponse:
+    """Delete a transform step and optionally cascade to dependent steps."""
+    try:
+        result = pipeline_service.delete_step(
+            db=db,
+            pipeline_id=pipeline_id,
+            version_id=version_id,
+            step_id=step_id,
+            cascade=cascade,
+            preview_limit=preview_limit,
+        )
+        return DeleteStepResponse(**result)
+    except pipeline_service.PipelineDependencyConflictError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": str(e),
+                "affected_step_ids": e.affected_step_ids,
+                "affected_columns": e.affected_columns,
+            },
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

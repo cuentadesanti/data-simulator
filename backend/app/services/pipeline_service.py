@@ -6,6 +6,7 @@ adding transform steps, and materializing data.
 
 from __future__ import annotations
 
+import copy
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -16,10 +17,24 @@ from sqlalchemy.orm import Session
 from app.db.models import Pipeline, PipelineVersion
 from app.services.hashing import fingerprint_source, hash_steps
 from app.services.pipeline_source import (
-    infer_schema_from_df,
     load_simulation_source,
 )
 from app.services.transform_registry import get_transform_registry
+
+
+class PipelineDependencyConflictError(ValueError):
+    """Raised when a step mutation would violate transform dependencies."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        affected_step_ids: list[str] | None = None,
+        affected_columns: list[str] | None = None,
+    ):
+        super().__init__(message)
+        self.affected_step_ids = affected_step_ids or []
+        self.affected_columns = affected_columns or []
 
 
 # =============================================================================
@@ -251,6 +266,113 @@ def add_step(
     }
 
 
+def delete_step(
+    db: Session,
+    pipeline_id: str,
+    version_id: str,
+    step_id: str,
+    *,
+    cascade: bool = False,
+    preview_limit: int = 200,
+) -> dict[str, Any]:
+    """Delete a transform step, optionally cascading to dependent downstream steps.
+
+    Always creates a new pipeline version when successful.
+    """
+    version = db.get(PipelineVersion, version_id)
+    if not version or version.pipeline_id != pipeline_id:
+        raise ValueError(f"Version {version_id} not found in pipeline {pipeline_id}")
+
+    pipeline = db.get(Pipeline, pipeline_id)
+    if not pipeline:
+        raise ValueError(f"Pipeline {pipeline_id} not found")
+
+    steps = _normalize_step_orders(version.steps)
+    step_ids = {step["step_id"] for step in steps}
+    if step_id not in step_ids:
+        raise ValueError(f"Step '{step_id}' not found in version '{version_id}'")
+
+    dependency_map = _build_step_dependency_map(steps)
+    downstream_ids = _collect_downstream_step_ids(step_id, dependency_map)
+
+    if downstream_ids and not cascade:
+        affected_columns = [
+            step["output_column"] for step in steps if step["step_id"] in downstream_ids
+        ]
+        raise PipelineDependencyConflictError(
+            "Deleting this step would break dependent downstream steps",
+            affected_step_ids=sorted(downstream_ids),
+            affected_columns=sorted(set(affected_columns)),
+        )
+
+    removed_step_ids = {step_id}
+    if cascade:
+        removed_step_ids.update(downstream_ids)
+
+    remaining_steps = [
+        step for step in steps if step["step_id"] not in removed_step_ids
+    ]
+    rebuild = _rebuild_version_from_steps(db, version, remaining_steps)
+    mutation = _create_mutated_version(
+        db,
+        pipeline,
+        version,
+        rebuild,
+        preview_limit=preview_limit,
+    )
+
+    removed_columns = [
+        step["output_column"] for step in steps if step["step_id"] in removed_step_ids
+    ]
+    mutation["removed_step_ids"] = sorted(removed_step_ids)
+    mutation["affected_columns"] = sorted(set(removed_columns))
+    return mutation
+
+
+def reorder_steps(
+    db: Session,
+    pipeline_id: str,
+    version_id: str,
+    step_ids: list[str],
+    *,
+    preview_limit: int = 200,
+) -> dict[str, Any]:
+    """Reorder pipeline transform steps and create a new version."""
+    version = db.get(PipelineVersion, version_id)
+    if not version or version.pipeline_id != pipeline_id:
+        raise ValueError(f"Version {version_id} not found in pipeline {pipeline_id}")
+
+    pipeline = db.get(Pipeline, pipeline_id)
+    if not pipeline:
+        raise ValueError(f"Pipeline {pipeline_id} not found")
+
+    current_steps = _normalize_step_orders(version.steps)
+    current_ids = [step["step_id"] for step in current_steps]
+
+    if len(step_ids) != len(current_ids):
+        raise ValueError("Step reorder list must include all current steps exactly once")
+    if len(set(step_ids)) != len(step_ids):
+        raise ValueError("Step reorder list contains duplicate step IDs")
+    if set(step_ids) != set(current_ids):
+        raise ValueError("Step reorder list must be a permutation of current step IDs")
+
+    step_by_id = {step["step_id"]: step for step in current_steps}
+    reordered_steps: list[dict[str, Any]] = []
+    for index, step_id in enumerate(step_ids, start=1):
+        step = copy.deepcopy(step_by_id[step_id])
+        step["order"] = index
+        reordered_steps.append(step)
+
+    rebuild = _rebuild_version_from_steps(db, version, reordered_steps)
+    return _create_mutated_version(
+        db,
+        pipeline,
+        version,
+        rebuild,
+        preview_limit=preview_limit,
+    )
+
+
 # =============================================================================
 # Materialization
 # =============================================================================
@@ -329,6 +451,179 @@ def _materialize_to_df(db: Session, version: PipelineVersion) -> pd.DataFrame:
         df[step["output_column"]] = result_series
     
     return df
+
+
+def _normalize_step_orders(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return a copy of steps sorted and renumbered with sequential order values."""
+    ordered = sorted(
+        [copy.deepcopy(step) for step in steps],
+        key=lambda s: (int(s.get("order", 0)), s.get("created_at", ""), s.get("step_id", "")),
+    )
+    for index, step in enumerate(ordered, start=1):
+        step["order"] = index
+    return ordered
+
+
+def _build_step_dependency_map(
+    ordered_steps: list[dict[str, Any]]
+) -> dict[str, set[str]]:
+    """Build direct dependencies map using required input columns per step."""
+    registry = get_transform_registry()
+    produced_by_col: dict[str, str] = {}
+    dependency_map: dict[str, set[str]] = {}
+
+    for step in ordered_steps:
+        step_id = step["step_id"]
+        transform = registry.get(step["type"])
+        params = step.get("params", {})
+        required_cols = transform.required_columns(params) if transform else []
+        deps = {
+            produced_by_col[col]
+            for col in required_cols
+            if col in produced_by_col
+        }
+        dependency_map[step_id] = deps
+        produced_by_col[step["output_column"]] = step_id
+    return dependency_map
+
+
+def _collect_downstream_step_ids(
+    root_step_id: str, dependency_map: dict[str, set[str]]
+) -> set[str]:
+    """Collect all transitive downstream step IDs that depend on root_step_id."""
+    reverse_map: dict[str, set[str]] = {}
+    for step_id, deps in dependency_map.items():
+        for dep_id in deps:
+            reverse_map.setdefault(dep_id, set()).add(step_id)
+
+    seen: set[str] = set()
+    stack = list(reverse_map.get(root_step_id, set()))
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        stack.extend(reverse_map.get(current, set()))
+    return seen
+
+
+def _rebuild_version_from_steps(
+    db: Session,
+    source_version: PipelineVersion,
+    steps: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Rebuild schema/lineage/dataframe by replaying steps over the source."""
+    ordered_steps = _normalize_step_orders(steps)
+    registry = get_transform_registry()
+    df, inferred_input_schema = load_simulation_source(
+        db=db,
+        dag_version_id=source_version.source_dag_version_id,
+        seed=source_version.source_seed,
+        sample_size=source_version.source_sample_size,
+    )
+    input_schema = source_version.input_schema or inferred_input_schema
+    output_schema = [dict(col) for col in input_schema]
+    lineage: list[dict[str, Any]] = []
+    warnings_count = 0
+
+    for step in ordered_steps:
+        transform = registry.get(step["type"])
+        if not transform:
+            raise ValueError(f"Unknown transform type: {step['type']}")
+
+        params = step.get("params", {})
+        output_column = step["output_column"]
+        required_cols = transform.required_columns(params)
+        current_columns = {col["name"] for col in output_schema}
+        missing = [col for col in required_cols if col not in current_columns]
+        if missing:
+            raise PipelineDependencyConflictError(
+                (
+                    f"Step '{step['step_id']}' requires missing columns: "
+                    f"{', '.join(sorted(missing))}"
+                ),
+                affected_step_ids=[step["step_id"]],
+                affected_columns=sorted(missing),
+            )
+
+        result_series, metadata = transform.apply(df, params)
+        df[output_column] = result_series
+        inferred_dtype = transform.infer_dtype(output_schema, params)
+        if output_column in current_columns:
+            output_schema = [
+                {
+                    "name": col["name"],
+                    "dtype": inferred_dtype if col["name"] == output_column else col["dtype"],
+                }
+                for col in output_schema
+            ]
+        else:
+            output_schema.append({"name": output_column, "dtype": inferred_dtype})
+
+        lineage.append(
+            {
+                "output_col": output_column,
+                "inputs": required_cols,
+                "step_id": step["step_id"],
+                "transform_name": step["type"],
+            }
+        )
+        warnings_count += int((metadata or {}).get("warnings_count", 0))
+
+    return {
+        "steps": ordered_steps,
+        "input_schema": input_schema,
+        "output_schema": output_schema,
+        "lineage": lineage,
+        "dataframe": df,
+        "warnings": warnings_count,
+    }
+
+
+def _create_mutated_version(
+    db: Session,
+    pipeline: Pipeline,
+    source_version: PipelineVersion,
+    rebuild: dict[str, Any],
+    *,
+    preview_limit: int,
+) -> dict[str, Any]:
+    """Persist a rebuilt step mutation as a new version and return API payload."""
+    steps = rebuild["steps"]
+    output_schema = rebuild["output_schema"]
+    input_schema = rebuild["input_schema"]
+    lineage = rebuild["lineage"]
+    df = rebuild["dataframe"]
+    warnings = rebuild["warnings"]
+
+    new_version = PipelineVersion(
+        pipeline_id=pipeline.id,
+        version_number=source_version.version_number + 1,
+        steps=steps,
+        input_schema=input_schema,
+        output_schema=output_schema,
+        lineage=lineage,
+        source_dag_version_id=source_version.source_dag_version_id,
+        source_seed=source_version.source_seed,
+        source_sample_size=source_version.source_sample_size,
+        source_fingerprint=source_version.source_fingerprint,
+        steps_hash=hash_steps(steps),
+    )
+    db.add(new_version)
+    db.flush()
+    pipeline.current_version_id = new_version.id
+    db.commit()
+    db.refresh(new_version)
+
+    preview_rows = df.head(preview_limit).to_dict(orient="records")
+    return {
+        "new_version_id": new_version.id,
+        "schema": output_schema,
+        "preview_rows": preview_rows,
+        "warnings": warnings,
+        "steps": steps,
+        "lineage": lineage,
+    }
 
 
 # =============================================================================

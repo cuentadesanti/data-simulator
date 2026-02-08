@@ -2,10 +2,11 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { FormulaBar } from './FormulaBar';
 import { RecipePanel } from './RecipePanel';
 import { ModelsPanel } from './ModelsPanel';
+import { PipelineAnalysisTabs } from './PipelineAnalysisTabs';
 import {
     usePipelineStore,
     selectPipelineSchema,
@@ -16,6 +17,7 @@ import {
     selectFormulaBarError,
     selectCurrentPipelineId,
     selectCurrentVersionId,
+    selectPipelineLineage,
 } from '../../stores/pipelineStore';
 import { useProjectStore } from '../../stores/projectStore';
 import {
@@ -34,6 +36,7 @@ import {
     selectSavedConfigs,
 } from '../../stores/modelingStore';
 import type { TransformInfo, PipelineStep, SchemaColumn } from '../../api/pipelineApi';
+import type { ModelTypeInfo } from '../../api/modelingApi';
 
 // Mock the stores
 vi.mock('../../stores/pipelineStore', () => ({
@@ -46,6 +49,7 @@ vi.mock('../../stores/pipelineStore', () => ({
     selectFormulaBarError: vi.fn(),
     selectCurrentPipelineId: vi.fn(),
     selectCurrentVersionId: vi.fn(),
+    selectPipelineLineage: vi.fn(),
 }));
 
 vi.mock('../../stores/projectStore', () => ({
@@ -79,6 +83,19 @@ describe('Pipeline Workbench Components Smoke Tests', () => {
         order: 0,
         created_at: new Date().toISOString()
     }];
+    const mockModelTypes: ModelTypeInfo[] = [
+        {
+            name: 'linear_regression',
+            display_name: 'Linear Regression',
+            description: 'Simple model.',
+            task_type: 'regression',
+            category: 'linear',
+            parameters: [],
+            video_links: [{ title: 'Intro to Linear Regression', url: 'https://example.com/video' }],
+            tags: [],
+            coming_soon: false,
+        },
+    ];
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -91,7 +108,8 @@ describe('Pipeline Workbench Components Smoke Tests', () => {
         vi.mocked(selectIsApplyingStep).mockReturnValue(false);
         vi.mocked(selectFormulaBarError).mockReturnValue(null);
         vi.mocked(selectCurrentPipelineId).mockReturnValue('p1');
-        vi.mocked(selectCurrentVersionId).mockReturnValue(null);
+        vi.mocked(selectCurrentVersionId).mockReturnValue('v1');
+        vi.mocked(selectPipelineLineage).mockReturnValue([]);
 
         // Default mock for usePipelineStore
         vi.mocked(usePipelineStore).mockImplementation((selector: unknown) => {
@@ -104,10 +122,13 @@ describe('Pipeline Workbench Components Smoke Tests', () => {
                     formulaBarError: null,
                     currentPipelineId: 'p1',
                     currentVersionId: null,
+                    lineage: [],
                     setFormulaBarError: vi.fn(),
                     addStep: vi.fn(),
                     materialize: vi.fn(),
                     refreshTransformsCatalog: vi.fn(),
+                    deleteStep: vi.fn(),
+                    reorderSteps: vi.fn(),
                 };
                 return (selector as (state: typeof mockState) => unknown)(mockState);
             }
@@ -177,6 +198,31 @@ describe('Pipeline Workbench Components Smoke Tests', () => {
     it('renders ModelsPanel without crashing', () => {
         vi.mocked(useProjectStore).mockReturnValue({ currentVersionId: 'dv1' } as never);
         render(<ModelsPanel />);
-        expect(screen.getByText('Model Training')).toBeDefined();
+        expect(screen.getByText('Model Configuration')).toBeDefined();
+    });
+
+    it('keeps learning materials collapsed by default', () => {
+        vi.mocked(selectModelTypes).mockReturnValue(mockModelTypes);
+        render(<ModelsPanel />);
+        expect(screen.queryByText('Intro to Linear Regression')).toBeNull();
+        fireEvent.click(screen.getAllByText('Learning Materials')[0]);
+        expect(screen.getByText('Intro to Linear Regression')).toBeDefined();
+    });
+
+    it('renders PipelineAnalysisTabs diagnostics empty state', () => {
+        render(
+            <PipelineAnalysisTabs
+                data={[{ age: 30, income: 100 }]}
+                columns={['age', 'income']}
+                derivedColumns={[]}
+                steps={[]}
+                lineage={[]}
+                selectedStepId={null}
+                onSelectStep={vi.fn()}
+                diagnostics={null}
+            />
+        );
+        fireEvent.click(screen.getByText('Diagnostics'));
+        expect(screen.getByText(/Fit a model to unlock diagnostics/)).toBeDefined();
     });
 });
