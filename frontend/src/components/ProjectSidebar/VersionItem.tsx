@@ -63,7 +63,9 @@ export function VersionItem({ projectId, version, isSelected }: VersionItemProps
       {!version.is_current && <span className="w-1.5 flex-shrink-0" />}
 
       {/* Version info */}
-      <span className="font-medium">v{version.version_number}</span>
+      <span className="font-medium">
+        {version.name?.trim() ? version.name : `v${version.version_number}`}
+      </span>
       <span className="text-xs text-gray-400 flex-1 truncate">
         {formatRelativeTime(version.created_at)}
       </span>

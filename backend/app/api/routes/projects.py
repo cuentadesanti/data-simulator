@@ -11,8 +11,22 @@ from sqlalchemy.orm import Session
 
 from app.db import crud, get_db
 from app.models.dag import DAGDefinition
+from app.services.validator import validate_dag
 
 router = APIRouter()
+
+
+def _ensure_valid_dag(dag_definition: DAGDefinition) -> None:
+    """Validate DAG before persistence."""
+    validation_result = validate_dag(dag_definition)
+    if validation_result.valid:
+        return
+
+    errors = validation_result.errors or ["Invalid DAG"]
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Invalid DAG: {'; '.join(errors)}",
+    )
 
 
 # =============================================================================
@@ -27,6 +41,9 @@ class DAGVersionResponse(BaseModel):
     version_number: int
     created_at: datetime
     is_current: bool
+    name: str | None = None
+    description: str | None = None
+    parent_version_id: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -35,6 +52,7 @@ class DAGVersionDetailResponse(DAGVersionResponse):
     """Response schema for a DAG version with definition."""
 
     dag_definition: dict[str, Any]
+    dag_diff: list[dict[str, Any]] | None = None
 
 
 class ProjectResponse(BaseModel):
@@ -94,7 +112,17 @@ class VersionCreate(BaseModel):
     """Request schema for creating a new DAG version."""
 
     dag_definition: DAGDefinition
+    name: str | None = Field(None, max_length=255)
+    description: str | None = Field(None, max_length=1000)
     set_current: bool = True
+
+
+class VersionUpdate(BaseModel):
+    """Request schema for updating an existing DAG version."""
+
+    dag_definition: DAGDefinition
+    name: str | None = Field(None, max_length=255)
+    description: str | None = Field(None, max_length=1000)
 
 
 # =============================================================================
@@ -126,6 +154,9 @@ def list_projects(
                         version_number=current_version.version_number,
                         created_at=current_version.created_at,
                         is_current=current_version.is_current,
+                        name=current_version.name,
+                        description=current_version.description,
+                        parent_version_id=current_version.parent_version_id,
                     )
                     if current_version
                     else None
@@ -169,6 +200,9 @@ def create_project(
                 version_number=current_version.version_number,
                 created_at=current_version.created_at,
                 is_current=current_version.is_current,
+                name=current_version.name,
+                description=current_version.description,
+                parent_version_id=current_version.parent_version_id,
             )
             if current_version
             else None
@@ -203,6 +237,9 @@ def get_project(
                 version_number=current_version.version_number,
                 created_at=current_version.created_at,
                 is_current=current_version.is_current,
+                name=current_version.name,
+                description=current_version.description,
+                parent_version_id=current_version.parent_version_id,
             )
             if current_version
             else None
@@ -254,6 +291,9 @@ def update_project(
                 version_number=current_version.version_number,
                 created_at=current_version.created_at,
                 is_current=current_version.is_current,
+                name=current_version.name,
+                description=current_version.description,
+                parent_version_id=current_version.parent_version_id,
             )
             if current_version
             else None
@@ -302,6 +342,9 @@ def list_versions(
             version_number=v.version_number,
             created_at=v.created_at,
             is_current=v.is_current,
+            name=v.name,
+            description=v.description,
+            parent_version_id=v.parent_version_id,
         )
         for v in versions
     ]
@@ -326,19 +369,33 @@ def create_version(
             detail=f"Project '{project_id}' not found",
         )
 
-    version = crud.create_version(
-        db,
-        project_id=project_id,
-        dag_definition=request.dag_definition,
-        set_current=request.set_current,
-    )
+    _ensure_valid_dag(request.dag_definition)
+
+    try:
+        version = crud.create_version(
+            db,
+            project_id=project_id,
+            dag_definition=request.dag_definition,
+            name=request.name,
+            description=request.description,
+            set_current=request.set_current,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
 
     return DAGVersionDetailResponse(
         id=version.id,
         version_number=version.version_number,
         created_at=version.created_at,
         is_current=version.is_current,
+        name=version.name,
+        description=version.description,
+        parent_version_id=version.parent_version_id,
         dag_definition=version.dag_definition,
+        dag_diff=version.dag_diff,
     )
 
 
@@ -368,7 +425,61 @@ def get_version(
         version_number=version.version_number,
         created_at=version.created_at,
         is_current=version.is_current,
+        name=version.name,
+        description=version.description,
+        parent_version_id=version.parent_version_id,
         dag_definition=version.dag_definition,
+        dag_diff=version.dag_diff,
+    )
+
+
+@router.put("/{project_id}/versions/{version_id}", response_model=DAGVersionDetailResponse)
+def update_version(
+    project_id: str,
+    version_id: str,
+    request: VersionUpdate,
+    db: Session = Depends(get_db),
+) -> DAGVersionDetailResponse:
+    """Update a specific version's DAG definition in place."""
+    project = crud.get_project(db, project_id)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project '{project_id}' not found",
+        )
+
+    version = crud.get_version(db, version_id)
+    if not version or version.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Version '{version_id}' not found in project '{project_id}'",
+        )
+    if not version.is_current:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only the current version can be updated in place",
+        )
+
+    _ensure_valid_dag(request.dag_definition)
+
+    version = crud.update_version(
+        db,
+        version=version,
+        dag_definition=request.dag_definition,
+        name=request.name,
+        description=request.description,
+    )
+
+    return DAGVersionDetailResponse(
+        id=version.id,
+        version_number=version.version_number,
+        created_at=version.created_at,
+        is_current=version.is_current,
+        name=version.name,
+        description=version.description,
+        parent_version_id=version.parent_version_id,
+        dag_definition=version.dag_definition,
+        dag_diff=version.dag_diff,
     )
 
 
@@ -396,11 +507,20 @@ def set_current_version(
             detail=f"Version '{version_id}' not found in project '{project_id}'",
         )
 
-    version = crud.set_current_version(db, version)
+    try:
+        version = crud.set_current_version(db, version)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
 
     return DAGVersionResponse(
         id=version.id,
         version_number=version.version_number,
         created_at=version.created_at,
         is_current=version.is_current,
+        name=version.name,
+        description=version.description,
+        parent_version_id=version.parent_version_id,
     )

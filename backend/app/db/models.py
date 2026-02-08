@@ -73,7 +73,13 @@ class DAGVersion(Base):
         String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    parent_version_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("dag_versions.id", ondelete="SET NULL"), nullable=True
+    )
     dag_definition: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    dag_diff: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
     )

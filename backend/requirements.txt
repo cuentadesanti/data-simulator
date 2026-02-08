@@ -23,6 +23,7 @@ simpleeval>=0.9.13
 # Database
 sqlalchemy>=2.0.0
 alembic>=1.13.0
+jsonpatch>=1.33
 
 # Dev
 pytest>=8.0.0

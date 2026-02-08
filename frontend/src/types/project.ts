@@ -7,6 +7,9 @@ export interface ProjectVersion {
   version_number: number;
   created_at: string;
   is_current: boolean;
+  name?: string | null;
+  description?: string | null;
+  parent_version_id?: string | null;
 }
 
 export interface Project {
@@ -32,4 +35,12 @@ export interface UpdateProjectRequest {
 
 export interface CreateVersionRequest {
   dag_definition: DAGDefinition; // DAG definition
+  name?: string;
+  description?: string;
+}
+
+export interface UpdateVersionRequest {
+  dag_definition: DAGDefinition;
+  name?: string;
+  description?: string;
 }

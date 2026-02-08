@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from typing import Any
 
+import jsonpatch
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import DAGVersion, Project
 from app.models.dag import DAGDefinition
+
+logger = logging.getLogger(__name__)
+MAX_DAG_DIFF_BYTES = 100_000
 
 
 # =============================================================================
@@ -118,12 +125,16 @@ def create_version(
     db: Session,
     project_id: str,
     dag_definition: DAGDefinition,
+    name: str | None = None,
+    description: str | None = None,
     set_current: bool = True,
 ) -> DAGVersion:
     """Create a new DAG version for a project."""
     # Get next version number
     latest = get_latest_version_number(db, project_id)
     next_version = latest + 1
+
+    parent_version = get_current_version(db, project_id)
 
     # If setting as current, unset current flag from other versions
     if set_current:
@@ -132,13 +143,65 @@ def create_version(
     # Serialize DAGDefinition to dict
     dag_dict: dict[str, Any] = dag_definition.model_dump(mode="json")
 
+    dag_diff = None
+    parent_version_id = None
+    if parent_version:
+        parent_version_id = parent_version.id
+        dag_diff = _build_dag_diff(parent_version.dag_definition, dag_dict)
+
     version = DAGVersion(
         project_id=project_id,
         version_number=next_version,
+        name=name,
+        description=description,
+        parent_version_id=parent_version_id,
         dag_definition=dag_dict,
+        dag_diff=dag_diff,
         is_current=set_current,
     )
     db.add(version)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise ValueError("Concurrent save conflict; please retry") from error
+    db.refresh(version)
+    return version
+
+
+def update_version(
+    db: Session,
+    version: DAGVersion,
+    dag_definition: DAGDefinition,
+    name: str | None = None,
+    description: str | None = None,
+) -> DAGVersion:
+    """Update an existing DAG version in place.
+
+    Note: `parent_version_id` is intentionally immutable. `dag_diff` always
+    represents delta from the original parent to the latest state.
+    """
+    dag_dict: dict[str, Any] = dag_definition.model_dump(mode="json")
+
+    version.dag_definition = dag_dict
+    if name is not None:
+        version.name = name
+    if description is not None:
+        version.description = description
+
+    if version.parent_version_id:
+        parent = db.get(DAGVersion, version.parent_version_id)
+        if parent:
+            version.dag_diff = _build_dag_diff(parent.dag_definition, dag_dict)
+        else:
+            logger.warning(
+                "Missing parent version while updating DAG version",
+                extra={"version_id": version.id, "parent_version_id": version.parent_version_id},
+            )
+            version.dag_diff = None
+    else:
+        version.dag_diff = None
+
     db.commit()
     db.refresh(version)
     return version
@@ -150,7 +213,11 @@ def set_current_version(db: Session, version: DAGVersion) -> DAGVersion:
     _unset_current_versions(db, version.project_id)
 
     version.is_current = True
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise ValueError("Concurrent save conflict; please retry") from error
     db.refresh(version)
     return version
 
@@ -162,3 +229,27 @@ def _unset_current_versions(db: Session, project_id: str) -> None:
     )
     for version in db.execute(stmt).scalars().all():
         version.is_current = False
+
+
+def _build_dag_diff(previous_dag: dict[str, Any], current_dag: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Build a JSON patch diff and cap its size to avoid oversized DB payloads."""
+    try:
+        patch_ops = jsonpatch.JsonPatch.from_diff(previous_dag, current_dag).patch
+    except Exception:
+        logger.exception("Failed computing DAG diff")
+        return None
+
+    try:
+        patch_size = len(json.dumps(patch_ops, separators=(",", ":")).encode("utf-8"))
+    except Exception:
+        logger.exception("Failed measuring DAG diff size")
+        return None
+
+    if patch_size > MAX_DAG_DIFF_BYTES:
+        logger.warning(
+            "Skipping oversized DAG diff",
+            extra={"diff_bytes": patch_size, "max_bytes": MAX_DAG_DIFF_BYTES},
+        )
+        return None
+
+    return patch_ops
