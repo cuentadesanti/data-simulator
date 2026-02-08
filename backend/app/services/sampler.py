@@ -434,9 +434,8 @@ def _sample_deterministic_node(
         )
 
     # Import here to avoid circular dependencies
-    from simpleeval import EvalWithCompoundTypes, NameNotDefined
+    from simpleeval import EvalWithCompoundTypes
 
-    from app.core.exceptions import FormulaParseError, LookupKeyMissingError, UnknownVariableError
     from app.services.formula_parser import (
         ALLOWED_FUNCTIONS,
         NameResolver,
