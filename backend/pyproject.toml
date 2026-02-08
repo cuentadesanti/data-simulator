@@ -25,6 +25,7 @@ dependencies = [
     "PyJWT[crypto]>=2.8.0",
     "cryptography>=42.0.0",
     "slowapi>=0.1.9",
+    "jsonpatch>=1.33",
 ]
 
 [project.optional-dependencies]

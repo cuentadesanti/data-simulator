@@ -6,6 +6,8 @@ import type {
   ProjectVersion,
   CreateProjectRequest,
   UpdateProjectRequest,
+  CreateVersionRequest,
+  UpdateVersionRequest,
 } from '../types/project';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -322,9 +324,24 @@ export const projectsApi = {
    */
   createVersion: async (
     projectId: string,
-    data: { dag_definition: DAGDefinition }
+    data: CreateVersionRequest
   ): Promise<ProjectVersion> => {
     const response = await api.post<ProjectVersion>(`/api/projects/${projectId}/versions`, data);
+    return response.data;
+  },
+
+  /**
+   * Update a DAG version in place
+   */
+  updateVersion: async (
+    projectId: string,
+    versionId: string,
+    data: UpdateVersionRequest
+  ): Promise<ProjectVersion> => {
+    const response = await api.put<ProjectVersion>(
+      `/api/projects/${projectId}/versions/${versionId}`,
+      data
+    );
     return response.data;
   },
 

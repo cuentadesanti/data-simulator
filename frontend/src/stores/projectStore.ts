@@ -47,7 +47,9 @@ interface ProjectActions {
   updateProject: (projectId: string, name: string, description?: string) => Promise<void>;
 
   // Version operations
-  saveVersion: () => Promise<void>;
+  saveCurrentVersion: () => Promise<void>;
+  saveNewVersion: (name: string, description?: string) => Promise<ProjectVersion>;
+  hasStructuralChanges: () => boolean;
   fetchVersions: (projectId: string) => Promise<ProjectVersion[]>;
 
   // Dirty state
@@ -255,8 +257,50 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
       });
     },
 
-    // Save current DAG as new version
-    saveVersion: async () => {
+    // Save current DAG by updating the existing version
+    saveCurrentVersion: async () => {
+      const { currentProjectId, currentVersionId } = get();
+      if (!currentProjectId || !currentVersionId) {
+        throw new Error('No project or version selected');
+      }
+
+      set((state) => {
+        state.isSaving = true;
+      });
+
+      try {
+        const dagStore = useDAGStore.getState();
+        const dag = dagStore.exportDAG();
+
+        const version = await projectsApi.updateVersion(currentProjectId, currentVersionId, {
+          dag_definition: dag,
+        });
+
+        // Update local state
+        const dagSnapshot = JSON.stringify(dag);
+
+        set((state) => {
+          state.currentVersionId = version.id;
+          state.hasUnsavedChanges = false;
+          state.lastSavedState = dagSnapshot;
+          state.isSaving = false;
+
+          const project = state.projects.find((p) => p.id === currentProjectId);
+          if (project) {
+            project.current_version = version;
+            project.updated_at = new Date().toISOString();
+          }
+        });
+      } catch (error) {
+        set((state) => {
+          state.isSaving = false;
+        });
+        throw error;
+      }
+    },
+
+    // Save current DAG as a new version
+    saveNewVersion: async (name: string, description?: string) => {
       const { currentProjectId } = get();
       if (!currentProjectId) {
         throw new Error('No project selected');
@@ -270,7 +314,11 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
         const dagStore = useDAGStore.getState();
         const dag = dagStore.exportDAG();
 
-        const version = await projectsApi.createVersion(currentProjectId, { dag_definition: dag });
+        const version = await projectsApi.createVersion(currentProjectId, {
+          dag_definition: dag,
+          name,
+          description,
+        });
 
         // Update local state
         const dagSnapshot = JSON.stringify(dag);
@@ -281,7 +329,6 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
           state.lastSavedState = dagSnapshot;
           state.isSaving = false;
 
-          // Update the project's current version in the list
           const project = state.projects.find((p) => p.id === currentProjectId);
           if (project) {
             project.current_version = version;
@@ -289,8 +336,8 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
           }
         });
 
-        // Refresh project to get updated version list
         await get().fetchProjects();
+        return version;
       } catch (error) {
         set((state) => {
           state.isSaving = false;
@@ -343,6 +390,42 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
       const currentState = JSON.stringify(dagStore.exportDAG());
 
       return currentState !== lastSavedState;
+    },
+
+    // Check if nodes or edges were added/removed since last save
+    hasStructuralChanges: () => {
+      const { lastSavedState, currentProjectId } = get();
+      if (!currentProjectId || !lastSavedState) {
+        return false;
+      }
+
+      const dagStore = useDAGStore.getState();
+      const currentDag = dagStore.exportDAG();
+
+      let previousDag: typeof currentDag;
+      try {
+        previousDag = JSON.parse(lastSavedState);
+      } catch (error) {
+        console.error('Failed to parse last saved state:', error);
+        return true;
+      }
+
+      const prevNodeIds = new Set(previousDag.nodes.map((n) => n.id));
+      const currNodeIds = new Set(currentDag.nodes.map((n) => n.id));
+      if (prevNodeIds.size !== currNodeIds.size) return true;
+      for (const id of prevNodeIds) {
+        if (!currNodeIds.has(id)) return true;
+      }
+
+      const edgeKey = (e: { source: string; target: string }) => `${e.source}->${e.target}`;
+      const prevEdges = new Set(previousDag.edges.map(edgeKey));
+      const currEdges = new Set(currentDag.edges.map(edgeKey));
+      if (prevEdges.size !== currEdges.size) return true;
+      for (const key of prevEdges) {
+        if (!currEdges.has(key)) return true;
+      }
+
+      return false;
     },
 
     // Toggle sidebar visibility
