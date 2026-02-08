@@ -402,7 +402,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
       const dagStore = useDAGStore.getState();
       const currentDag = dagStore.exportDAG();
 
-      let previousDag: typeof currentDag | null = null;
+      let previousDag: typeof currentDag;
       try {
         previousDag = JSON.parse(lastSavedState);
       } catch (error) {

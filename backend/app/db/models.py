@@ -67,6 +67,16 @@ class DAGVersion(Base):
     """DAG version model for storing versioned DAG definitions."""
 
     __tablename__ = "dag_versions"
+    __table_args__ = (
+        Index("ix_dag_versions_parent_version_id", "parent_version_id"),
+        Index(
+            "uq_dag_versions_one_current_per_project",
+            "project_id",
+            unique=True,
+            sqlite_where="is_current = 1",
+            postgresql_where="is_current = true",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
     project_id: Mapped[str] = mapped_column(
