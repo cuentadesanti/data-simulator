@@ -139,6 +139,7 @@ def create_version(
     # If setting as current, unset current flag from other versions
     if set_current:
         _unset_current_versions(db, project_id)
+        db.flush()  # Flush to ensure is_current=False is persisted before creating new current
 
     # Serialize DAGDefinition to dict
     dag_dict: dict[str, Any] = dag_definition.model_dump(mode="json")
@@ -211,6 +212,7 @@ def set_current_version(db: Session, version: DAGVersion) -> DAGVersion:
     """Set a version as the current version."""
     # Unset current flag from other versions
     _unset_current_versions(db, version.project_id)
+    db.flush()  # Flush to ensure is_current=False is persisted before setting new current
 
     version.is_current = True
     try:
