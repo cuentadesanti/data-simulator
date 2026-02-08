@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -73,8 +73,8 @@ class DAGVersion(Base):
             "uq_dag_versions_one_current_per_project",
             "project_id",
             unique=True,
-            sqlite_where="is_current = 1",
-            postgresql_where="is_current = true",
+            sqlite_where=text("is_current = 1"),
+            postgresql_where=text("is_current = true"),
         ),
     )
 
