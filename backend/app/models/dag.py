@@ -145,7 +145,7 @@ class NodeConfig(BaseModel):
     dtype: NodeDtype | None = Field(None, description="Data type (optional, inferrable)")
     scope: NodeScope = Field("row", description="Scope: global, group, or row")
     group_by: str | None = Field(
-        None, description="Node var_name to group by (only for scope=group)"
+        None, description="Node ID to group by (only for scope=group). Must reference a categorical ancestor node."
     )
 
     # MECE: only one of these should be set based on kind

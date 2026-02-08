@@ -59,7 +59,7 @@ def generate_preview(dag: DAGDefinition) -> PreviewResponse:
     )
 
     # Step 4: Compute statistics
-    column_stats = _compute_column_stats(df)
+    column_stats = _compute_column_stats(df, dag)
 
     # Step 5: Convert DataFrame to list of dicts for JSON response
     data_records = df.to_dict(orient="records")
@@ -412,6 +412,7 @@ def _sample_deterministic_node(
     """Generate values for a deterministic node using formulas.
 
     Evaluates the formula for each row using available parent node values.
+    Optimized to expand formula once and reuse evaluator across rows.
 
     Args:
         node: Node configuration (must be deterministic)
@@ -432,19 +433,38 @@ def _sample_deterministic_node(
             node_id=node.id,
         )
 
-    # Evaluate formula for each row
+    # Import here to avoid circular dependencies
+    from simpleeval import EvalWithCompoundTypes
+
+    from app.services.formula_parser import (
+        ALLOWED_FUNCTIONS,
+        NameResolver,
+        expand_canonical_references,
+    )
+
+    # Optimize: Expand canonical references once before the loop
+    expanded_formula = expand_canonical_references(node.formula, id_to_var_name)
+
+    # Optimize: Create evaluator once and reuse
+    evaluator = EvalWithCompoundTypes()
+    evaluator.functions = ALLOWED_FUNCTIONS
+
+    # Pre-allocate result array
     if node.dtype in ("string", "category"):
         values = np.empty(sample_size, dtype=object)
     else:
         values = np.zeros(sample_size)
 
+    # Evaluate formula for each row
     for i in range(sample_size):
         # Build row data dict for this row
         row_data = {col: vals[i] for col, vals in row_data_dict.items()}
 
-        # Parse and evaluate formula (with canonical expansion support)
+        # Update name resolver (reuses same evaluator)
+        evaluator.names = NameResolver(row_data, context)
+
         try:
-            values[i] = parse_formula(node.formula, row_data, context, id_to_var_name)
+            values[i] = evaluator.eval(expanded_formula)
         except Exception as e:
             raise SampleError(
                 message=f"Formula evaluation failed for node '{node.id}' at row {i}: {str(e)}",
@@ -660,10 +680,14 @@ def _sample_group_scope(
         )
 
     # Translate group_by (node ID) to var_name for column lookup
-    # node.group_by stores a node ID, but row_data_dict uses var_names as keys
-    group_by_var_name = node.group_by
-    if id_to_var_name and node.group_by in id_to_var_name:
-        group_by_var_name = id_to_var_name[node.group_by]
+    # node.group_by always stores a node ID, but row_data_dict uses var_names as keys
+    if not id_to_var_name or node.group_by not in id_to_var_name:
+        raise SampleError(
+            message=f"Cannot resolve group_by node ID '{node.group_by}' to var_name",
+            node_id=node.id,
+            details={"group_by": node.group_by},
+        )
+    group_by_var_name = id_to_var_name[node.group_by]
 
     # Get the group_by column values
     if group_by_var_name not in row_data_dict:
@@ -817,19 +841,26 @@ def _cast_to_dtype(values: np.ndarray, dtype: str) -> np.ndarray:
         return values
 
 
-def _compute_column_stats(df: pd.DataFrame) -> list[ColumnStats]:
+def _compute_column_stats(df: pd.DataFrame, dag: DAGDefinition) -> list[ColumnStats]:
     """Compute statistics for each column in the DataFrame.
 
     Args:
-        df: DataFrame with generated data
+        df: DataFrame with generated data (columns are var_names)
+        dag: DAG definition to map var_names back to node IDs
 
     Returns:
-        List of ColumnStats objects
+        List of ColumnStats objects with both node_id and var_name
     """
+    # Build mapping from var_name to node_id
+    var_name_to_node = {node.effective_var_name: node.id for node in dag.nodes}
+
     stats_list = []
 
     for col in df.columns:
         series = df[col]
+
+        # Map column name (var_name) back to node ID
+        node_id = var_name_to_node.get(col, col)  # Fallback to col if not found
 
         # Detect dtype
         if pd.api.types.is_numeric_dtype(series):
@@ -873,7 +904,8 @@ def _compute_column_stats(df: pd.DataFrame) -> list[ColumnStats]:
 
         stats_list.append(
             ColumnStats(
-                node_id=col,
+                node_id=node_id,
+                var_name=col,
                 dtype=dtype,
                 mean=mean,
                 std=std,
