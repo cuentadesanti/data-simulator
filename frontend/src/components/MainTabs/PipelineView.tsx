@@ -187,118 +187,150 @@ export const PipelineView = () => {
         );
     }
 
-    // Has DAG preview but no pipeline - show create option
-    if (hasDagPreview && !hasPipeline) {
-        return (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-green-50">
-                <div className="text-center max-w-md px-8">
-                    <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg">
-                        <PlusCircle className="w-10 h-10 text-white" />
-                    </div>
-                    <h2 className="text-2xl font-semibold text-gray-800 mb-3">
-                        Ready to Create Pipeline
-                    </h2>
-                    <p className="text-gray-500 mb-8 leading-relaxed">
-                        Your DAG preview is ready! Create a pipeline to add derived columns,
-                        apply transformations, and train ML models on your data.
-                    </p>
+    const readyToCreatePipeline = (
+        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-green-50">
+            <div className="text-center max-w-md px-8">
+                <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg">
+                    <PlusCircle className="w-10 h-10 text-white" />
+                </div>
+                <h2 className="text-2xl font-semibold text-gray-800 mb-3">
+                    Ready to Create Pipeline
+                </h2>
+                <p className="text-gray-500 mb-8 leading-relaxed">
+                    Your DAG preview is ready! Create a pipeline to add derived columns,
+                    apply transformations, and train ML models on your data.
+                </p>
 
-                    {!showCreateModal ? (
-                        <button
-                            onClick={() => setShowCreateModal(true)}
-                            className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-8 py-3 rounded-xl font-medium hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                        >
-                            <PlusCircle size={20} />
-                            Create Pipeline
-                        </button>
-                    ) : (
-                        <div className="bg-white rounded-2xl shadow-2xl p-6 text-left border border-gray-100">
-                            <div className="flex items-center justify-between mb-6">
-                                <h4 className="font-semibold text-gray-800 text-lg">
-                                    New Pipeline
-                                </h4>
-                                <button
-                                    onClick={() => setShowCreateModal(false)}
-                                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                                >
-                                    <X size={20} />
-                                </button>
+                {!showCreateModal ? (
+                    <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-8 py-3 rounded-xl font-medium hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    >
+                        <PlusCircle size={20} />
+                        Create Pipeline
+                    </button>
+                ) : (
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 text-left border border-gray-100">
+                        <div className="flex items-center justify-between mb-6">
+                            <h4 className="font-semibold text-gray-800 text-lg">New Pipeline</h4>
+                            <button
+                                onClick={() => setShowCreateModal(false)}
+                                className="text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-5">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Pipeline Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={pipelineName}
+                                    onChange={(e) => setPipelineName(e.target.value)}
+                                    placeholder="e.g., Income Analysis Pipeline"
+                                    className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                                    autoFocus
+                                />
                             </div>
 
-                            <div className="space-y-5">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Pipeline Name
+                                        Random Seed
                                     </label>
                                     <input
-                                        type="text"
-                                        value={pipelineName}
-                                        onChange={(e) => setPipelineName(e.target.value)}
-                                        placeholder="e.g., Income Analysis Pipeline"
+                                        type="number"
+                                        value={seed}
+                                        onChange={(e) => setSeed(parseInt(e.target.value) || 42)}
                                         className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                                        autoFocus
                                     />
+                                    <p className="text-xs text-gray-400 mt-1">
+                                        For reproducibility
+                                    </p>
                                 </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Random Seed
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={seed}
-                                            onChange={(e) => setSeed(parseInt(e.target.value) || 42)}
-                                            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                                        />
-                                        <p className="text-xs text-gray-400 mt-1">
-                                            For reproducibility
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Sample Size
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={sampleSize}
-                                            onChange={(e) =>
-                                                setSampleSize(parseInt(e.target.value) || 1000)
-                                            }
-                                            min={1}
-                                            max={100000}
-                                            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                                        />
-                                        <p className="text-xs text-gray-400 mt-1">1 - 100,000 rows</p>
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-3 pt-4">
-                                    <button
-                                        onClick={() => setShowCreateModal(false)}
-                                        className="flex-1 px-4 py-3 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleCreatePipeline}
-                                        disabled={isCreating || !pipelineName.trim()}
-                                        className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 py-3 rounded-lg text-sm font-medium hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                                    >
-                                        {isCreating ? (
-                                            <>
-                                                <Loader2 size={16} className="animate-spin" />
-                                                Creating...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Play size={16} />
-                                                Create Pipeline
-                                            </>
-                                        )}
-                                    </button>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Sample Size
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={sampleSize}
+                                        onChange={(e) => setSampleSize(parseInt(e.target.value) || 1000)}
+                                        min={1}
+                                        max={100000}
+                                        className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                                    />
+                                    <p className="text-xs text-gray-400 mt-1">1 - 100,000 rows</p>
                                 </div>
                             </div>
+
+                            <div className="flex gap-3 pt-4">
+                                <button
+                                    onClick={() => setShowCreateModal(false)}
+                                    className="flex-1 px-4 py-3 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleCreatePipeline}
+                                    disabled={isCreating || !pipelineName.trim()}
+                                    className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 py-3 rounded-lg text-sm font-medium hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                >
+                                    {isCreating ? (
+                                        <>
+                                            <Loader2 size={16} className="animate-spin" />
+                                            Creating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Play size={16} />
+                                            Create Pipeline
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+
+    // Has DAG preview but no pipeline - show tabs with Data/Models
+    if (hasDagPreview && !hasPipeline) {
+        return (
+            <div className="w-full h-full flex flex-col bg-gray-50">
+                <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex gap-1">
+                            {subTabs.map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveSubTab(tab.id)}
+                                    className={`
+                                        flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 transition-colors
+                                        ${activeSubTab === tab.id
+                                            ? 'border-blue-500 text-blue-600'
+                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }
+                                    `}
+                                >
+                                    {tab.icon}
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-hidden">
+                    {activeSubTab === 'table' && readyToCreatePipeline}
+                    {activeSubTab === 'models' && (
+                        <div className="h-full overflow-y-auto">
+                            <ModelsPanel />
                         </div>
                     )}
                 </div>

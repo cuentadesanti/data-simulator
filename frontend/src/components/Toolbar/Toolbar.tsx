@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CheckCircle, Download, Upload, Trash2, Save, ArrowUpRight } from 'lucide-react';
-import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
+import { SignInButton, UserButton, useAuth } from '@clerk/clerk-react';
 import { useDAGStore, selectActiveMainTab } from '../../stores/dagStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { dagApi, downloadBlob } from '../../services/api';
@@ -8,10 +8,13 @@ import { useToast } from '../common';
 import { AddNodeDropdown } from './AddNodeDropdown';
 import { GenerateButton } from './GenerateButton';
 import { ValidationStatus } from './ValidationStatus';
+import { isAuthBypassed } from '../../utils/auth';
 
 import { NewProjectDialog } from '../ProjectSidebar/NewProjectDialog';
 
 export const Toolbar: React.FC = () => {
+  const { isSignedIn } = useAuth();
+  const authBypassed = isAuthBypassed();
   const [isValidating, setIsValidating] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState(false);
@@ -460,16 +463,21 @@ export const Toolbar: React.FC = () => {
 
         {/* Auth */}
         <div className="ml-2 pl-2 border-l border-gray-200 flex items-center">
-          <SignedOut>
+          {authBypassed && (
+            <span className="px-2 py-1 text-xs font-medium rounded bg-amber-100 text-amber-800">
+              Local Auth Bypass
+            </span>
+          )}
+          {!authBypassed && !isSignedIn && (
             <SignInButton mode="modal">
               <button className="px-3 py-1.5 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800 transition-colors">
                 Sign In
               </button>
             </SignInButton>
-          </SignedOut>
-          <SignedIn>
+          )}
+          {!authBypassed && isSignedIn && (
             <UserButton />
-          </SignedIn>
+          )}
         </div>
       </div>
     </div>

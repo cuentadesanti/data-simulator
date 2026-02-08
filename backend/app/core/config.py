@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     clerk_secret_key: str = ""
 
     # Auth - Clerk configuration
+    auth_bypass: bool = False  # Dev-only bypass for local runs
     clerk_issuer: str = ""  # Expected issuer domain, e.g., "https://clerk.data-simulator.com"
                              # Leave empty to accept any issuer (less secure, backward compatible)
 
