@@ -44,6 +44,7 @@ class DAGVersionResponse(BaseModel):
     name: str | None = None
     description: str | None = None
     parent_version_id: str | None = None
+    is_public: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -123,6 +124,16 @@ class VersionUpdate(BaseModel):
     dag_definition: DAGDefinition
     name: str | None = Field(None, max_length=255)
     description: str | None = Field(None, max_length=1000)
+
+
+class ShareVersionResponse(BaseModel):
+    """Response schema for a shared version."""
+
+    project_id: str
+    version_id: str
+    is_public: bool
+    share_token: str | None = None
+    public_path: str | None = None
 
 
 # =============================================================================
@@ -345,6 +356,7 @@ def list_versions(
             name=v.name,
             description=v.description,
             parent_version_id=v.parent_version_id,
+            is_public=v.is_public,
         )
         for v in versions
     ]
@@ -394,6 +406,7 @@ def create_version(
         name=version.name,
         description=version.description,
         parent_version_id=version.parent_version_id,
+        is_public=version.is_public,
         dag_definition=version.dag_definition,
         dag_diff=version.dag_diff,
     )
@@ -428,6 +441,7 @@ def get_version(
         name=version.name,
         description=version.description,
         parent_version_id=version.parent_version_id,
+        is_public=version.is_public,
         dag_definition=version.dag_definition,
         dag_diff=version.dag_diff,
     )
@@ -523,4 +537,77 @@ def set_current_version(
         name=version.name,
         description=version.description,
         parent_version_id=version.parent_version_id,
+        is_public=version.is_public,
+    )
+
+
+@router.post(
+    "/{project_id}/versions/{version_id}/share",
+    response_model=ShareVersionResponse,
+)
+def share_version(
+    project_id: str,
+    version_id: str,
+    db: Session = Depends(get_db),
+) -> ShareVersionResponse:
+    """Enable public sharing for a DAG version and return its share token."""
+    project = crud.get_project(db, project_id)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project '{project_id}' not found",
+        )
+
+    version = crud.get_version(db, version_id)
+    if not version or version.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Version '{version_id}' not found in project '{project_id}'",
+        )
+
+    version = crud.set_version_public(db, version, True)
+
+    return ShareVersionResponse(
+        project_id=project_id,
+        version_id=version_id,
+        is_public=version.is_public,
+        share_token=version.share_token,
+        public_path=(
+            f"/api/public/dags/{version.share_token}" if version.share_token else None
+        ),
+    )
+
+
+@router.delete(
+    "/{project_id}/versions/{version_id}/share",
+    response_model=ShareVersionResponse,
+)
+def unshare_version(
+    project_id: str,
+    version_id: str,
+    db: Session = Depends(get_db),
+) -> ShareVersionResponse:
+    """Disable public sharing for a DAG version."""
+    project = crud.get_project(db, project_id)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project '{project_id}' not found",
+        )
+
+    version = crud.get_version(db, version_id)
+    if not version or version.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Version '{version_id}' not found in project '{project_id}'",
+        )
+
+    version = crud.set_version_public(db, version, False)
+
+    return ShareVersionResponse(
+        project_id=project_id,
+        version_id=version_id,
+        is_public=version.is_public,
+        share_token=version.share_token,
+        public_path=None,
     )

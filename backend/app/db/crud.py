@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
 from typing import Any
 
 import jsonpatch
@@ -99,6 +100,12 @@ def list_versions(db: Session, project_id: str) -> list[DAGVersion]:
 def get_version(db: Session, version_id: str) -> DAGVersion | None:
     """Get a version by ID."""
     return db.get(DAGVersion, version_id)
+
+
+def get_version_by_share_token(db: Session, share_token: str) -> DAGVersion | None:
+    """Get a public DAG version by share token."""
+    stmt = select(DAGVersion).where(DAGVersion.share_token == share_token)
+    return db.execute(stmt).scalar_one_or_none()
 
 
 def get_current_version(db: Session, project_id: str) -> DAGVersion | None:
@@ -224,6 +231,20 @@ def set_current_version(db: Session, version: DAGVersion) -> DAGVersion:
     return version
 
 
+def set_version_public(db: Session, version: DAGVersion, is_public: bool) -> DAGVersion:
+    """Enable or disable public sharing for a version."""
+    version.is_public = is_public
+    if is_public:
+        if not version.share_token:
+            version.share_token = _generate_unique_share_token(db)
+    else:
+        version.share_token = None
+
+    db.commit()
+    db.refresh(version)
+    return version
+
+
 def _unset_current_versions(db: Session, project_id: str) -> None:
     """Unset is_current flag for all versions of a project."""
     stmt = (
@@ -231,6 +252,15 @@ def _unset_current_versions(db: Session, project_id: str) -> None:
     )
     for version in db.execute(stmt).scalars().all():
         version.is_current = False
+
+
+def _generate_unique_share_token(db: Session) -> str:
+    """Generate a unique URL-safe share token."""
+    while True:
+        token = secrets.token_urlsafe(24)
+        existing = get_version_by_share_token(db, token)
+        if existing is None:
+            return token
 
 
 def _build_dag_diff(previous_dag: dict[str, Any], current_dag: dict[str, Any]) -> list[dict[str, Any]] | None:
