@@ -13,9 +13,10 @@ class Settings(BaseSettings):
     environment: str = "dev"  # dev, staging, prod
     clerk_secret_key: str = ""
 
-    # CORS - comma-separated list of allowed origins
-    # Default allows localhost for dev. In prod, set explicitly to your frontend domain(s)
-    cors_origins: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
+    # CORS - comma-separated list of allowed origins, or "*" for all (default)
+    # WARNING: "*" allows all origins. In production, set to your specific domain(s).
+    # Example: "https://yourdomain.com,https://app.yourdomain.com"
+    cors_origins: str = "*"
 
     # Generation limits
     max_rows_hard: int = 10_000_000
@@ -52,17 +53,14 @@ def get_cors_origins() -> list[str]:
     """Parse CORS origins from settings.
 
     Returns:
-        List of allowed origin strings. Returns ["*"] only in dev mode if origins is "*".
+        List of allowed origin strings. Returns ["*"] if not configured (backward compatible).
     """
     origins_str = settings.cors_origins.strip()
 
-    # Only allow wildcard in dev mode
+    # Allow wildcard (backward compatible with previous behavior)
+    # In production, you should set DS_CORS_ORIGINS to your specific domain(s)
     if origins_str == "*":
-        if settings.environment == "dev":
-            return ["*"]
-        else:
-            # In prod, never allow wildcard - default to empty (no CORS)
-            return []
+        return ["*"]
 
     # Parse comma-separated list
     return [origin.strip() for origin in origins_str.split(",") if origin.strip()]
