@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { enableMapSet } from 'immer';
-import type { Project, ProjectVersion } from '../types/project';
+import type { CreateProjectRequest, Project, ProjectVersion } from '../types/project';
 import { projectsApi } from '../services/api';
 import { useDAGStore } from './dagStore';
 
@@ -186,11 +186,15 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
       // Get the empty DAG state
       const dag = dagStore.exportDAG();
 
-      const project = await projectsApi.create({
+      const payload: CreateProjectRequest = {
         name,
         description,
-        dag_definition: dag,
-      });
+      };
+      if (dag.nodes.length > 0) {
+        payload.dag_definition = dag;
+      }
+
+      const project = await projectsApi.create(payload);
 
       // Refresh project list
       await get().fetchProjects();
