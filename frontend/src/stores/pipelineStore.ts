@@ -11,8 +11,11 @@ import {
     type PipelineResponse,
     type SchemaColumn,
     type PipelineStep,
+    type LineageEntry,
     type TransformInfo,
     type AddStepResponse,
+    type PipelineVersionMutationResponse,
+    type DeleteStepResponse,
 } from '../api/pipelineApi';
 
 // =============================================================================
@@ -28,6 +31,7 @@ interface PipelineState {
     // Schema and data
     schema: SchemaColumn[];
     steps: PipelineStep[];
+    lineage: LineageEntry[];
     previewRows: Record<string, unknown>[];
     materializedRows: Record<string, unknown>[];
 
@@ -62,6 +66,15 @@ interface PipelineActions {
         params: Record<string, unknown>,
         allowOverwrite?: boolean
     ) => Promise<AddStepResponse>;
+    deleteStep: (
+        stepId: string,
+        cascade?: boolean,
+        previewLimit?: number
+    ) => Promise<DeleteStepResponse>;
+    reorderSteps: (
+        stepIds: string[],
+        previewLimit?: number
+    ) => Promise<PipelineVersionMutationResponse>;
 
     // Materialization
     materialize: (limit?: number, columns?: string[]) => Promise<void>;
@@ -84,6 +97,7 @@ const initialState: PipelineState = {
     pipelineDetails: null,
     schema: [],
     steps: [],
+    lineage: [],
     previewRows: [],
     materializedRows: [],
     availableTransforms: [],
@@ -128,6 +142,7 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
                     state.currentVersionId = result.current_version_id;
                     state.schema = result.schema;
                     state.steps = [];
+                    state.lineage = [];
                     state.previewRows = [];
                     state.materializedRows = [];
                     state.isCreatingPipeline = false;
@@ -155,6 +170,12 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
                         state.currentVersionId = details.current_version.id;
                         state.schema = details.current_version.output_schema;
                         state.steps = details.current_version.steps;
+                        state.lineage = details.current_version.lineage;
+                    } else {
+                        state.currentVersionId = null;
+                        state.schema = [];
+                        state.steps = [];
+                        state.lineage = [];
                     }
                 });
             } catch (error) {
@@ -189,6 +210,7 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
                     state.currentVersionId = result.new_version_id;
                     state.schema = result.schema;
                     state.previewRows = result.preview_rows;
+                    state.materializedRows = [];
                     state.lastWarnings = result.warnings;
                     state.isApplyingStep = false;
                 });
@@ -202,6 +224,83 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
                     state.isApplyingStep = false;
                     state.formulaBarError =
                         error instanceof Error ? error.message : 'Failed to apply step';
+                });
+                throw error;
+            }
+        },
+
+        deleteStep: async (stepId, cascade = false, previewLimit = 200) => {
+            const { currentPipelineId, currentVersionId } = get();
+            if (!currentPipelineId || !currentVersionId) {
+                throw new Error('No active pipeline');
+            }
+
+            set((state) => {
+                state.isApplyingStep = true;
+                state.formulaBarError = null;
+            });
+
+            try {
+                const result = await pipelineApi.deleteStep(
+                    currentPipelineId,
+                    currentVersionId,
+                    stepId,
+                    cascade,
+                    previewLimit
+                );
+                set((state) => {
+                    state.currentVersionId = result.new_version_id;
+                    state.schema = result.schema;
+                    state.steps = result.steps;
+                    state.lineage = result.lineage;
+                    state.previewRows = result.preview_rows;
+                    state.materializedRows = [];
+                    state.lastWarnings = result.warnings;
+                    state.isApplyingStep = false;
+                });
+                return result;
+            } catch (error) {
+                set((state) => {
+                    state.isApplyingStep = false;
+                    state.formulaBarError =
+                        error instanceof Error ? error.message : 'Failed to delete step';
+                });
+                throw error;
+            }
+        },
+
+        reorderSteps: async (stepIds, previewLimit = 200) => {
+            const { currentPipelineId, currentVersionId } = get();
+            if (!currentPipelineId || !currentVersionId) {
+                throw new Error('No active pipeline');
+            }
+
+            set((state) => {
+                state.isApplyingStep = true;
+                state.formulaBarError = null;
+            });
+
+            try {
+                const result = await pipelineApi.reorderSteps(currentPipelineId, currentVersionId, {
+                    step_ids: stepIds,
+                    preview_limit: previewLimit,
+                });
+                set((state) => {
+                    state.currentVersionId = result.new_version_id;
+                    state.schema = result.schema;
+                    state.steps = result.steps;
+                    state.lineage = result.lineage;
+                    state.previewRows = result.preview_rows;
+                    state.materializedRows = [];
+                    state.lastWarnings = result.warnings;
+                    state.isApplyingStep = false;
+                });
+                return result;
+            } catch (error) {
+                set((state) => {
+                    state.isApplyingStep = false;
+                    state.formulaBarError =
+                        error instanceof Error ? error.message : 'Failed to reorder steps';
                 });
                 throw error;
             }
@@ -280,6 +379,8 @@ export const selectPipelineSchema = (state: PipelineState & PipelineActions) =>
     state.schema;
 export const selectPipelineSteps = (state: PipelineState & PipelineActions) =>
     state.steps;
+export const selectPipelineLineage = (state: PipelineState & PipelineActions) =>
+    state.lineage;
 export const selectPreviewRows = (state: PipelineState & PipelineActions) =>
     state.previewRows;
 export const selectMaterializedRows = (state: PipelineState & PipelineActions) =>

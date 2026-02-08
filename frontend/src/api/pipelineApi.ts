@@ -52,6 +52,25 @@ export interface AddStepResponse {
     warnings: number;
 }
 
+export interface PipelineVersionMutationResponse {
+    new_version_id: string;
+    schema: SchemaColumn[];
+    preview_rows: Record<string, unknown>[];
+    warnings: number;
+    steps: PipelineStep[];
+    lineage: LineageEntry[];
+}
+
+export interface DeleteStepResponse extends PipelineVersionMutationResponse {
+    removed_step_ids: string[];
+    affected_columns: string[];
+}
+
+export interface ReorderStepsRequest {
+    step_ids: string[];
+    preview_limit?: number;
+}
+
 export interface MaterializeResponse {
     schema: SchemaColumn[];
     rows: Record<string, unknown>[];
@@ -180,6 +199,41 @@ export const pipelineApi = {
         const response = await api.post<AddStepResponse>(
             `/api/pipelines/${pipelineId}/versions/${versionId}/steps`,
             request
+        );
+        return response.data;
+    },
+
+    /**
+     * Reorder transform steps, creating a new pipeline version.
+     */
+    reorderSteps: async (
+        pipelineId: string,
+        versionId: string,
+        request: ReorderStepsRequest
+    ): Promise<PipelineVersionMutationResponse> => {
+        const response = await api.post<PipelineVersionMutationResponse>(
+            `/api/pipelines/${pipelineId}/versions/${versionId}/steps/reorder`,
+            request
+        );
+        return response.data;
+    },
+
+    /**
+     * Delete a transform step, optionally cascading to downstream dependent steps.
+     */
+    deleteStep: async (
+        pipelineId: string,
+        versionId: string,
+        stepId: string,
+        cascade: boolean = false,
+        previewLimit: number = 200
+    ): Promise<DeleteStepResponse> => {
+        const params = new URLSearchParams();
+        params.append('cascade', String(cascade));
+        params.append('preview_limit', String(previewLimit));
+
+        const response = await api.delete<DeleteStepResponse>(
+            `/api/pipelines/${pipelineId}/versions/${versionId}/steps/${stepId}?${params.toString()}`
         );
         return response.data;
     },

@@ -9,7 +9,15 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db.database import Base
 from app.db.models import DAGVersion, Pipeline, PipelineVersion, Project
 from app.services.hashing import canonical_json_dumps, fingerprint_source, hash_steps
-from app.services.pipeline_service import add_step, create_pipeline, materialize, resimulate
+from app.services.pipeline_service import (
+    PipelineDependencyConflictError,
+    add_step,
+    create_pipeline,
+    delete_step,
+    materialize,
+    reorder_steps,
+    resimulate,
+)
 from app.services.transform_registry import get_transform_registry, validate_safe_expression
 
 
@@ -382,6 +390,175 @@ class TestPipelineService:
 
         assert v1.source_fingerprint == v2.source_fingerprint
         assert v1.steps_hash == v2.steps_hash
+
+    def test_delete_leaf_step_creates_new_version(self, db_session: Session, project_with_dag):
+        """Deleting a leaf step should create a new version with that step removed."""
+        project, dag_version = project_with_dag
+        created = create_pipeline(
+            db=db_session,
+            project_id=project.id,
+            name="Delete leaf pipeline",
+            source_type="simulation",
+            dag_version_id=dag_version.id,
+            seed=42,
+            sample_size=100,
+        )
+        v2 = add_step(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=created["version_id"],
+            step_spec={
+                "type": "formula",
+                "output_column": "income_x2",
+                "params": {"expression": "income * 2"},
+            },
+        )
+        v3 = add_step(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=v2["new_version_id"],
+            step_spec={
+                "type": "formula",
+                "output_column": "income_x4",
+                "params": {"expression": "income_x2 * 2"},
+            },
+        )
+
+        result = delete_step(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=v3["new_version_id"],
+            step_id=db_session.get(PipelineVersion, v3["new_version_id"]).steps[-1]["step_id"],
+            cascade=False,
+            preview_limit=20,
+        )
+
+        assert len(result["steps"]) == 1
+        assert result["steps"][0]["output_column"] == "income_x2"
+        assert result["removed_step_ids"]
+        assert result["new_version_id"] != v3["new_version_id"]
+
+    def test_delete_with_dependency_conflict_and_cascade(self, db_session: Session, project_with_dag):
+        """Deleting a parent step without cascade should fail; with cascade should pass."""
+        project, dag_version = project_with_dag
+        created = create_pipeline(
+            db=db_session,
+            project_id=project.id,
+            name="Cascade delete pipeline",
+            source_type="simulation",
+            dag_version_id=dag_version.id,
+            seed=42,
+            sample_size=100,
+        )
+        v2 = add_step(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=created["version_id"],
+            step_spec={
+                "type": "formula",
+                "output_column": "income_x2",
+                "params": {"expression": "income * 2"},
+            },
+        )
+        v3 = add_step(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=v2["new_version_id"],
+            step_spec={
+                "type": "formula",
+                "output_column": "income_x4",
+                "params": {"expression": "income_x2 * 2"},
+            },
+        )
+        version = db_session.get(PipelineVersion, v3["new_version_id"])
+        parent_step_id = version.steps[0]["step_id"]
+
+        with pytest.raises(PipelineDependencyConflictError):
+            delete_step(
+                db=db_session,
+                pipeline_id=created["pipeline_id"],
+                version_id=v3["new_version_id"],
+                step_id=parent_step_id,
+                cascade=False,
+            )
+
+        cascaded = delete_step(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=v3["new_version_id"],
+            step_id=parent_step_id,
+            cascade=True,
+        )
+        assert cascaded["steps"] == []
+        assert len(cascaded["removed_step_ids"]) == 2
+        assert "income_x2" in cascaded["affected_columns"]
+        assert "income_x4" in cascaded["affected_columns"]
+
+    def test_reorder_steps_valid_and_invalid(self, db_session: Session, project_with_dag):
+        """Reordering should allow dependency-safe moves and reject invalid dependency order."""
+        project, dag_version = project_with_dag
+        created = create_pipeline(
+            db=db_session,
+            project_id=project.id,
+            name="Reorder pipeline",
+            source_type="simulation",
+            dag_version_id=dag_version.id,
+            seed=42,
+            sample_size=100,
+        )
+        v2 = add_step(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=created["version_id"],
+            step_spec={
+                "type": "log",
+                "output_column": "log_income",
+                "params": {"column": "income"},
+            },
+        )
+        v3 = add_step(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=v2["new_version_id"],
+            step_spec={
+                "type": "sqrt",
+                "output_column": "sqrt_age",
+                "params": {"column": "age"},
+            },
+        )
+
+        v3_obj = db_session.get(PipelineVersion, v3["new_version_id"])
+        original_hash = v3_obj.steps_hash
+        ids = [step["step_id"] for step in v3_obj.steps]
+        reordered = reorder_steps(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=v3["new_version_id"],
+            step_ids=[ids[1], ids[0]],
+        )
+        assert [step["step_id"] for step in reordered["steps"]] == [ids[1], ids[0]]
+        assert db_session.get(PipelineVersion, reordered["new_version_id"]).steps_hash != original_hash
+
+        # Build dependency chain and assert invalid reorder is rejected.
+        v4 = add_step(
+            db=db_session,
+            pipeline_id=created["pipeline_id"],
+            version_id=reordered["new_version_id"],
+            step_spec={
+                "type": "formula",
+                "output_column": "income_chain",
+                "params": {"expression": "log_income * 2"},
+            },
+        )
+        v4_obj = db_session.get(PipelineVersion, v4["new_version_id"])
+        chain_ids = [step["step_id"] for step in v4_obj.steps]
+        with pytest.raises(PipelineDependencyConflictError):
+            reorder_steps(
+                db=db_session,
+                pipeline_id=created["pipeline_id"],
+                version_id=v4["new_version_id"],
+                step_ids=[chain_ids[2], chain_ids[0], chain_ids[1]],
+            )
 
 
 # =============================================================================
