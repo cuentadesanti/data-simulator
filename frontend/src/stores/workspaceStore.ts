@@ -24,7 +24,7 @@ interface WorkspaceActions {
 
 const initialState: WorkspaceState = {
   activeStage: 'source',
-  inspectorOpen: true,
+  inspectorOpen: false,
   inspectorContext: null,
   leftRailCollapsed: false,
 };

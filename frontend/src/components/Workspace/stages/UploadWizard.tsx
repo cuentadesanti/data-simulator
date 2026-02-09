@@ -28,7 +28,14 @@ export const UploadWizard = () => {
   const { addToast } = useToast();
 
   const handleUpload = async () => {
-    if (!projectId || !file) return;
+    if (!projectId) {
+      addToast('info', 'Select a project in the top navigation first');
+      return;
+    }
+    if (!file) {
+      addToast('info', 'Choose a CSV or Parquet file first');
+      return;
+    }
     const started = performance.now();
     setIsUploading(true);
     trackFeedbackLatencyOnNextPaint('source.upload', started, {
@@ -75,6 +82,11 @@ export const UploadWizard = () => {
         <div className="rounded-lg border border-gray-200 bg-white p-6">
           <h3 className="text-lg font-semibold text-gray-900">Step 1: Upload file</h3>
           <p className="mt-1 text-sm text-gray-500">CSV or Parquet up to 200MB.</p>
+          {!projectId && (
+            <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+              No project selected. Pick a project from the top navigation before uploading.
+            </p>
+          )}
           <input
             type="file"
             accept=".csv,.parquet"

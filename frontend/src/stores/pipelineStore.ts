@@ -51,7 +51,12 @@ interface PipelineActions {
         name: string,
         dagVersionId: string,
         seed: number,
-        sampleSize: number
+        sampleSize: number,
+        options?: {
+            trackClick?: boolean;
+            userInitiated?: boolean;
+            pathId?: 'HP-1' | 'HP-2' | 'HP-3';
+        }
     ) => Promise<CreatePipelineResponse>;
     createPipelineFromUpload: (
         projectId: string,
@@ -110,7 +115,8 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
             name,
             dagVersionId,
             seed,
-            sampleSize
+            sampleSize,
+            options
         ) => {
             set((state) => {
                 state.isCreatingPipeline = true;
@@ -139,9 +145,13 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
                     state.materializedRows = [];
                     state.isCreatingPipeline = false;
                 });
-                trackClick('HP-1', 'source', 'create_pipeline_simulation', { familiar_pattern: true });
-                trackCompletionLatency('pipeline.create.simulation', started, { user_initiated: true });
-                trackProgressFeedback('HP-1', 'source', 'pipeline_created');
+                const pathId = options?.pathId ?? 'HP-1';
+                const userInitiated = options?.userInitiated ?? true;
+                if (options?.trackClick ?? true) {
+                    trackClick(pathId, 'source', 'create_pipeline_simulation', { familiar_pattern: true });
+                }
+                trackCompletionLatency('pipeline.create.simulation', started, { user_initiated: userInitiated });
+                trackProgressFeedback(pathId, 'source', 'pipeline_created');
 
                 return result;
             } catch (error) {

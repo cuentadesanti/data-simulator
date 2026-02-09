@@ -1,8 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useDAGStore, selectSelectedNodeId } from '../../stores/dagStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
-import { useProjectStore, selectSidebarOpen } from '../../stores/projectStore';
-import { ProjectSidebar } from '../ProjectSidebar';
+import { useProjectStore } from '../../stores/projectStore';
 import { GlobalHeader } from './GlobalHeader';
 import { LeftRail } from './LeftRail';
 import { Inspector } from './Inspector';
@@ -15,17 +14,35 @@ import { PublishStage } from './stages/PublishStage';
 export const WorkspaceShell = () => {
   const activeStage = useWorkspaceStore((state) => state.activeStage);
   const inspectorOpen = useWorkspaceStore((state) => state.inspectorOpen);
+  const setInspectorOpen = useWorkspaceStore((state) => state.setInspectorOpen);
   const setInspectorContext = useWorkspaceStore((state) => state.setInspectorContext);
   const selectedNodeId = useDAGStore(selectSelectedNodeId);
-  const sidebarOpen = useProjectStore(selectSidebarOpen);
+  const fetchProjects = useProjectStore((state) => state.fetchProjects);
+  const restoreCurrentProject = useProjectStore((state) => state.restoreCurrentProject);
+  const initRef = useRef(false);
+
+  useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+    void (async () => {
+      await fetchProjects();
+      await restoreCurrentProject();
+      const state = useProjectStore.getState();
+      if (!state.currentProjectId && state.projects.length > 0) {
+        await state.selectProject(state.projects[0].id);
+      }
+    })();
+  }, [fetchProjects, restoreCurrentProject]);
 
   useEffect(() => {
     if (selectedNodeId) {
+      setInspectorOpen(true);
       setInspectorContext({ type: 'node', id: selectedNodeId });
     } else {
+      setInspectorOpen(false);
       setInspectorContext(null);
     }
-  }, [selectedNodeId, setInspectorContext]);
+  }, [selectedNodeId, setInspectorContext, setInspectorOpen]);
 
   return (
     <div className="h-screen w-full bg-gray-50">
@@ -42,12 +59,6 @@ export const WorkspaceShell = () => {
           </div>
         </main>
         {inspectorOpen && <div className="hidden xl:block">{<Inspector />}</div>}
-
-        {sidebarOpen && (
-          <div className="absolute left-0 top-0 z-30 h-full">
-            <ProjectSidebar />
-          </div>
-        )}
       </div>
     </div>
   );

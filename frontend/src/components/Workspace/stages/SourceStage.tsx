@@ -4,6 +4,7 @@ import { SourceChooser } from './SourceChooser';
 import { UploadWizard } from './UploadWizard';
 import { useSourceStore } from '../../../stores/sourceStore';
 import { useDAGStore, selectNodes } from '../../../stores/dagStore';
+import { useProjectStore } from '../../../stores/projectStore';
 import { ValidationChips } from '../ValidationChips';
 import { useAutoValidation } from '../../../hooks/useAutoValidation';
 import { trackFlowStart } from '../../../services/telemetry';
@@ -11,6 +12,8 @@ import { trackFlowStart } from '../../../services/telemetry';
 export const SourceStage = () => {
   const sourceType = useSourceStore((state) => state.sourceType);
   const setSourceType = useSourceStore((state) => state.setSourceType);
+  const currentProjectId = useProjectStore((state) => state.currentProjectId);
+  const setProjectSourceType = useProjectStore((state) => state.setProjectSourceType);
   const nodes = useDAGStore(selectNodes);
   const initializedRef = useRef(false);
 
@@ -26,8 +29,11 @@ export const SourceStage = () => {
       if (type === 'dag') trackFlowStart('HP-1');
       if (type === 'upload') trackFlowStart('HP-3');
       setSourceType(type);
+      if (currentProjectId) {
+        setProjectSourceType(currentProjectId, type);
+      }
     },
-    [setSourceType],
+    [currentProjectId, setProjectSourceType, setSourceType],
   );
 
   if (!sourceType) {
