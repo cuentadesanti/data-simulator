@@ -1,4 +1,4 @@
-import { FolderOpen, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { StageNav } from './StageNav';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useProjectStore, selectCurrentProject } from '../../stores/projectStore';
@@ -8,7 +8,6 @@ export const LeftRail = () => {
   const setCollapsed = useWorkspaceStore((state) => state.setLeftRailCollapsed);
   const currentProject = useProjectStore(selectCurrentProject);
   const currentVersionId = useProjectStore((state) => state.currentVersionId);
-  const toggleSidebar = useProjectStore((state) => state.toggleSidebar);
 
   return (
     <aside
@@ -41,17 +40,7 @@ export const LeftRail = () => {
         </button>
       </div>
 
-      <div className="space-y-3 p-2">
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-        >
-          <FolderOpen size={16} />
-          {!collapsed && <span>Projects</span>}
-        </button>
-        {!collapsed && <StageNav />}
-      </div>
+      <div className="space-y-3 p-2">{!collapsed && <StageNav />}</div>
     </aside>
   );
 };

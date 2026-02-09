@@ -25,9 +25,8 @@ export const sourcesApi = {
     form.append('project_id', projectId);
     form.append('file', file);
 
-    const response = await api.post<UploadSourceResponse>('/api/sources/upload', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    // Let the browser set multipart boundaries automatically.
+    const response = await api.post<UploadSourceResponse>('/api/sources/upload', form);
     return response.data;
   },
 

@@ -3,7 +3,10 @@ import { immer } from 'zustand/middleware/immer';
 import { enableMapSet } from 'immer';
 import type { CreateProjectRequest, Project, ProjectVersion } from '../types/project';
 import { projectsApi } from '../services/api';
+import { sourcesApi } from '../api/sourcesApi';
 import { useDAGStore } from './dagStore';
+import { useSourceStore } from './sourceStore';
+import { useWorkspaceStore } from './workspaceStore';
 import {
   trackClick,
   trackCompletionLatency,
@@ -16,6 +19,41 @@ enableMapSet();
 
 // LocalStorage key for persisting current project
 const CURRENT_PROJECT_KEY = 'data-simulator-current-project';
+const PROJECT_SOURCE_TYPE_KEY = 'data-simulator-project-source-type';
+
+type PreferredSourceType = 'dag' | 'upload';
+
+function loadPreferredSourceTypes(): Record<string, PreferredSourceType> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(PROJECT_SOURCE_TYPE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    const result: Record<string, PreferredSourceType> = {};
+    for (const [projectId, sourceType] of Object.entries(parsed)) {
+      if (sourceType === 'dag' || sourceType === 'upload') {
+        result[projectId] = sourceType;
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function persistPreferredSourceTypes(map: Record<string, PreferredSourceType>) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(PROJECT_SOURCE_TYPE_KEY, JSON.stringify(map));
+  } catch {
+    // Ignore persistence errors.
+  }
+}
+
+function hasDagNodes(dag: unknown): dag is { nodes: unknown[] } {
+  return !!dag && typeof dag === 'object' && Array.isArray((dag as { nodes?: unknown[] }).nodes);
+}
 
 interface ProjectState {
   // Project list
@@ -26,6 +64,7 @@ interface ProjectState {
   // Current project
   currentProjectId: string | null;
   currentVersionId: string | null;
+  projectSourceTypeByProjectId: Record<string, PreferredSourceType>;
 
   // Dirty state (unsaved changes)
   hasUnsavedChanges: boolean;
@@ -71,6 +110,7 @@ interface ProjectActions {
 
   // Clear state
   clearCurrentProject: () => void;
+  setProjectSourceType: (projectId: string, sourceType: PreferredSourceType) => void;
 }
 
 export const useProjectStore = create<ProjectState & ProjectActions>()(
@@ -81,9 +121,10 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
     projectsError: null,
     currentProjectId: null,
     currentVersionId: null,
+    projectSourceTypeByProjectId: loadPreferredSourceTypes(),
     hasUnsavedChanges: false,
     lastSavedState: null,
-    sidebarOpen: true,
+    sidebarOpen: false,
     expandedProjectIds: new Set<string>(),
     isSaving: false,
     isDeleting: false,
@@ -152,6 +193,36 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
         // Persist to localStorage
         localStorage.setItem(CURRENT_PROJECT_KEY, projectId);
+
+        const preferredSource = get().projectSourceTypeByProjectId[projectId] ?? null;
+        let resolvedSource: PreferredSourceType | null = null;
+        if (hasDagNodes(project.current_dag) && project.current_dag.nodes.length > 0) {
+          resolvedSource = 'dag';
+        } else if (preferredSource) {
+          resolvedSource = preferredSource;
+        } else {
+          try {
+            const uploads = await sourcesApi.list(projectId);
+            if (uploads.length > 0) {
+              resolvedSource = 'upload';
+            }
+          } catch {
+            resolvedSource = null;
+          }
+        }
+
+        const sourceStore = useSourceStore.getState();
+        if (resolvedSource === 'dag') {
+          sourceStore.setSourceType('dag');
+          get().setProjectSourceType(projectId, 'dag');
+        } else if (resolvedSource === 'upload') {
+          sourceStore.setSourceType('upload');
+          get().setProjectSourceType(projectId, 'upload');
+        } else {
+          sourceStore.clearSource();
+        }
+        useWorkspaceStore.getState().setActiveStage('source');
+
         trackFlowStart('HP-2');
         trackClick('HP-2', 'source', 'select_project', { familiar_pattern: true });
         trackCompletionLatency('project.select', started, { user_initiated: true });
@@ -182,6 +253,35 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
           state.hasUnsavedChanges = false;
           state.lastSavedState = dagSnapshot;
         });
+
+        const preferredSource = get().projectSourceTypeByProjectId[projectId] ?? null;
+        let resolvedSource: PreferredSourceType | null = null;
+        if (hasDagNodes(version.dag_definition) && version.dag_definition.nodes.length > 0) {
+          resolvedSource = 'dag';
+        } else if (preferredSource) {
+          resolvedSource = preferredSource;
+        } else {
+          try {
+            const uploads = await sourcesApi.list(projectId);
+            if (uploads.length > 0) {
+              resolvedSource = 'upload';
+            }
+          } catch {
+            resolvedSource = null;
+          }
+        }
+
+        const sourceStore = useSourceStore.getState();
+        if (resolvedSource === 'dag') {
+          sourceStore.setSourceType('dag');
+          get().setProjectSourceType(projectId, 'dag');
+        } else if (resolvedSource === 'upload') {
+          sourceStore.setSourceType('upload');
+          get().setProjectSourceType(projectId, 'upload');
+        } else {
+          sourceStore.clearSource();
+        }
+        useWorkspaceStore.getState().setActiveStage('source');
       } catch (error) {
         console.error('Failed to load version:', error);
         throw error;
@@ -221,6 +321,10 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
         state.lastSavedState = dagSnapshot;
         state.expandedProjectIds.add(project.id);
       });
+      localStorage.setItem(CURRENT_PROJECT_KEY, project.id);
+      useSourceStore.getState().setSourceType('dag');
+      get().setProjectSourceType(project.id, 'dag');
+      useWorkspaceStore.getState().setActiveStage('source');
       trackClick('HP-1', 'source', 'create_project', { familiar_pattern: true });
       trackCompletionLatency('project.create', started, { user_initiated: true });
       trackProgressFeedback('HP-1', 'source', 'project_created');
@@ -274,8 +378,8 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
     // Save current DAG by updating the existing version
     saveCurrentVersion: async () => {
       const { currentProjectId, currentVersionId } = get();
-      if (!currentProjectId || !currentVersionId) {
-        throw new Error('No project or version selected');
+      if (!currentProjectId) {
+        throw new Error('No project selected');
       }
 
       set((state) => {
@@ -287,9 +391,13 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
         const dagStore = useDAGStore.getState();
         const dag = dagStore.exportDAG();
 
-        const version = await projectsApi.updateVersion(currentProjectId, currentVersionId, {
-          dag_definition: dag,
-        });
+        const version = currentVersionId
+          ? await projectsApi.updateVersion(currentProjectId, currentVersionId, {
+              dag_definition: dag,
+            })
+          : await projectsApi.createVersion(currentProjectId, {
+              dag_definition: dag,
+            });
 
         // Update local state
         const dagSnapshot = JSON.stringify(dag);
@@ -304,8 +412,21 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
           if (project) {
             project.current_version = version;
             project.updated_at = new Date().toISOString();
+            if (project.versions) {
+              const existingIndex = project.versions.findIndex((v) => v.id === version.id);
+              if (existingIndex >= 0) {
+                project.versions[existingIndex] = version;
+              } else {
+                project.versions.unshift(version);
+              }
+            }
           }
         });
+
+        // Keep sorted project metadata consistent for sidebars that rely on list freshness.
+        if (!currentVersionId) {
+          await get().fetchProjects();
+        }
         trackClick('HP-2', 'publish', 'save_current_version', { familiar_pattern: true });
         trackCompletionLatency('project.save_current', started, { user_initiated: true });
       } catch (error) {
@@ -498,6 +619,13 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
         state.lastSavedState = null;
       });
       localStorage.removeItem(CURRENT_PROJECT_KEY);
+    },
+
+    setProjectSourceType: (projectId: string, sourceType: PreferredSourceType) => {
+      set((state) => {
+        state.projectSourceTypeByProjectId[projectId] = sourceType;
+      });
+      persistPreferredSourceTypes(get().projectSourceTypeByProjectId);
     },
   }))
 );

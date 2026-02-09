@@ -4,6 +4,7 @@ import { useProjectStore, selectCurrentProject } from '../../stores/projectStore
 import { useToast } from '../common';
 import { useShareVersion } from '../../hooks/useShareVersion';
 import { trackFeedbackLatencyOnNextPaint } from '../../services/telemetry';
+import { ProjectSessionPicker } from './ProjectSessionPicker';
 
 export const GlobalHeader = () => {
   const saveCurrentVersion = useProjectStore((state) => state.saveCurrentVersion);
@@ -44,6 +45,7 @@ export const GlobalHeader = () => {
           {currentProject?.name ?? 'Task Workspace'}
         </h1>
         <span className="text-xs text-gray-400">Source → Transform → Model → Publish</span>
+        <ProjectSessionPicker />
       </div>
       <div className="flex items-center gap-2">
         <button

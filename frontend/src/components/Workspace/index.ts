@@ -6,3 +6,4 @@ export { Inspector } from './Inspector';
 export { StageActionBar } from './StageActionBar';
 export { OverflowMenu } from './OverflowMenu';
 export { ValidationChips } from './ValidationChips';
+export { ProjectSessionPicker } from './ProjectSessionPicker';
