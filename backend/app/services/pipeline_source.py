@@ -1,4 +1,4 @@
-"""Pipeline source loader for loading simulation data.
+"""Pipeline source loader for loading source data.
 
 This module provides functions to load source data for pipelines,
 primarily from simulation runs (DAG + seed + sample_size).
@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session
 
 from app.db import crud
 from app.models.dag import DAGDefinition
+from app.services.schema_inference import infer_schema_from_df
 from app.services.sampler import _generate_data
+from app.services.upload_source import load_upload_dataframe
 
 
 def load_simulation_source(
@@ -71,46 +73,38 @@ def load_simulation_source(
     return df, schema
 
 
-def infer_schema_from_df(df: pd.DataFrame) -> list[dict[str, Any]]:
-    """Infer schema from a pandas DataFrame.
-    
-    Maps pandas dtypes to standardized type names.
-    
-    Args:
-        df: DataFrame to infer schema from
-        
-    Returns:
-        List of {name: str, dtype: str} for each column
-    """
-    schema = []
-    for col in df.columns:
-        dtype = df[col].dtype
-        
-        # Map numpy/pandas dtype to our standard type names
-        if pd.api.types.is_integer_dtype(dtype):
-            type_name = "int"
-        elif pd.api.types.is_float_dtype(dtype):
-            type_name = "float"
-        elif pd.api.types.is_bool_dtype(dtype):
-            type_name = "bool"
-        elif pd.api.types.is_categorical_dtype(dtype):
-            type_name = "category"
-        elif pd.api.types.is_object_dtype(dtype):
-            # Check if it's likely a string column
-            sample = df[col].dropna().head(10)
-            if len(sample) > 0 and all(isinstance(v, str) for v in sample):
-                type_name = "string"
-            else:
-                type_name = "object"
-        elif pd.api.types.is_datetime64_any_dtype(dtype):
-            type_name = "datetime"
-        else:
-            type_name = str(dtype)
-        
-        schema.append({"name": col, "dtype": type_name})
-    
-    return schema
+def load_upload_source(
+    db: Session,
+    source_id: str,
+) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
+    source = crud.get_uploaded_source(db, source_id)
+    if not source:
+        raise ValueError(f"Uploaded source '{source_id}' not found")
+    df = load_upload_dataframe(source.storage_uri, source.format)
+    schema = infer_schema_from_df(df)
+    return df, schema
 
+
+def load_source(
+    db: Session,
+    *,
+    source_dag_version_id: str | None,
+    source_upload_id: str | None,
+    source_seed: int | None,
+    source_sample_size: int | None,
+) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
+    if source_upload_id:
+        return load_upload_source(db, source_upload_id)
+
+    if not source_dag_version_id or source_seed is None or source_sample_size is None:
+        raise ValueError("Invalid simulation source metadata")
+
+    return load_simulation_source(
+        db,
+        source_dag_version_id,
+        source_seed,
+        source_sample_size,
+    )
 
 def get_column_names_from_schema(schema: list[dict[str, Any]]) -> list[str]:
     """Extract column names from a schema.

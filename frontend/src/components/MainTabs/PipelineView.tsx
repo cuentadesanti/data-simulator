@@ -8,13 +8,14 @@
  * - ModelsPanel: for training ML models
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
     Table2,
     Brain,
     Loader2,
     RefreshCw,
     Sparkles,
+    Plus,
 } from 'lucide-react';
 import { Dropdown, type DropdownOption } from '../common';
 import { FormulaBar, RecipePanel, ModelsPanel } from '../Pipeline';
@@ -82,9 +83,8 @@ export const PipelineView = () => {
 
     const [activeSubTab, setActiveSubTab] = useState<SubTabId>('table');
     const [showRecipePanel, setShowRecipePanel] = useState(true);
-    const [isCreatingAnonymous, setIsCreatingAnonymous] = useState(false);
-    const [anonymousCreateError, setAnonymousCreateError] = useState<string | null>(null);
-    const [anonymousCreateAttempted, setAnonymousCreateAttempted] = useState(false);
+    const [isCreatingPipeline, setIsCreatingPipeline] = useState(false);
+    const [createError, setCreateError] = useState<string | null>(null);
     const [materializeLimit, setMaterializeLimit] = useState(1000);
 
     const [seed] = useState(42);
@@ -109,11 +109,11 @@ export const PipelineView = () => {
         return steps.map((s) => s.output_column);
     }, [steps]);
 
-    const handleCreateAnonymousPipeline = async () => {
+    const handleCreatePipeline = async () => {
         if (!hasDagPreview) return;
 
-        setIsCreatingAnonymous(true);
-        setAnonymousCreateError(null);
+        setIsCreatingPipeline(true);
+        setCreateError(null);
         try {
             let targetProjectId = projectId;
             let targetDagVersionId = dagVersionId;
@@ -131,18 +131,18 @@ export const PipelineView = () => {
 
             await createPipelineFromSimulation(
                 targetProjectId,
-                'Untitled Pipeline',
+                `Pipeline ${new Date().toISOString().slice(0, 10)}`,
                 targetDagVersionId,
                 seed,
                 sampleSize
             );
         } catch (error) {
-            console.error('Failed to create anonymous pipeline:', error);
-            setAnonymousCreateError(
-                error instanceof Error ? error.message : 'Failed to initialize anonymous pipeline'
+            console.error('Failed to create pipeline:', error);
+            setCreateError(
+                error instanceof Error ? error.message : 'Failed to create pipeline'
             );
         } finally {
-            setIsCreatingAnonymous(false);
+            setIsCreatingPipeline(false);
         }
     };
 
@@ -150,27 +150,6 @@ export const PipelineView = () => {
         if (!currentPipelineId || !currentVersionId) return;
         await materialize(materializeLimit);
     };
-
-    // Start anonymous pipeline automatically when DAG preview exists.
-    useEffect(() => {
-        if (!hasDagPreview) {
-            setAnonymousCreateAttempted(false);
-            setAnonymousCreateError(null);
-            return;
-        }
-        if (hasPipeline || isCreatingAnonymous || anonymousCreateAttempted) {
-            return;
-        }
-
-        setAnonymousCreateAttempted(true);
-        void handleCreateAnonymousPipeline();
-    }, [
-        hasDagPreview,
-        hasPipeline,
-        isCreatingAnonymous,
-        anonymousCreateAttempted,
-        handleCreateAnonymousPipeline,
-    ]);
 
     // No DAG preview and no pipeline - show welcome screen
     if (!hasDagPreview && !hasPipeline) {
@@ -212,23 +191,40 @@ export const PipelineView = () => {
         );
     }
 
-    // Has DAG preview but no pipeline - bootstrap anonymous pipeline automatically.
+    // Has DAG preview but no pipeline - explicit creation required.
     if (hasDagPreview && !hasPipeline) {
         return (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-green-50">
                 <div className="text-center max-w-md px-8">
                     <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg">
-                        <Loader2 className="w-10 h-10 text-white animate-spin" />
+                        <Sparkles className="w-10 h-10 text-white" />
                     </div>
                     <h2 className="text-2xl font-semibold text-gray-800 mb-3">
-                        Preparing Anonymous Pipeline
+                        Create Pipeline From Source
                     </h2>
                     <p className="text-gray-500 leading-relaxed">
-                        Creating a scratch pipeline so you can transform data and fit models immediately.
+                        A preview source exists. Create a pipeline explicitly to continue.
                     </p>
-                    {anonymousCreateError && (
+                    <button
+                        onClick={handleCreatePipeline}
+                        disabled={isCreatingPipeline}
+                        className="mt-5 inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                        {isCreatingPipeline ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Creating...
+                            </>
+                        ) : (
+                            <>
+                                <Plus className="h-4 w-4" />
+                                Create Pipeline
+                            </>
+                        )}
+                    </button>
+                    {createError && (
                         <p className="mt-4 text-sm text-red-600">
-                            Failed to initialize pipeline: {anonymousCreateError}
+                            Failed to create pipeline: {createError}
                         </p>
                     )}
                 </div>

@@ -14,6 +14,7 @@ import {
     type TransformInfo,
     type AddStepResponse,
 } from '../api/pipelineApi';
+import { trackClick, trackCompletionLatency, trackProgressFeedback } from '../services/telemetry';
 
 // =============================================================================
 // Types
@@ -51,6 +52,11 @@ interface PipelineActions {
         dagVersionId: string,
         seed: number,
         sampleSize: number
+    ) => Promise<CreatePipelineResponse>;
+    createPipelineFromUpload: (
+        projectId: string,
+        name: string,
+        sourceId: string
     ) => Promise<CreatePipelineResponse>;
 
     loadPipeline: (pipelineId: string) => Promise<void>;
@@ -112,6 +118,7 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
             });
 
             try {
+                const started = performance.now();
                 const result = await pipelineApi.create({
                     project_id: projectId,
                     name,
@@ -132,6 +139,49 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
                     state.materializedRows = [];
                     state.isCreatingPipeline = false;
                 });
+                trackClick('HP-1', 'source', 'create_pipeline_simulation', { familiar_pattern: true });
+                trackCompletionLatency('pipeline.create.simulation', started, { user_initiated: true });
+                trackProgressFeedback('HP-1', 'source', 'pipeline_created');
+
+                return result;
+            } catch (error) {
+                set((state) => {
+                    state.isCreatingPipeline = false;
+                    state.formulaBarError =
+                        error instanceof Error ? error.message : 'Failed to create pipeline';
+                });
+                throw error;
+            }
+        },
+
+        createPipelineFromUpload: async (projectId, name, sourceId) => {
+            set((state) => {
+                state.isCreatingPipeline = true;
+                state.formulaBarError = null;
+            });
+
+            try {
+                const started = performance.now();
+                const result = await pipelineApi.create({
+                    project_id: projectId,
+                    name,
+                    source: {
+                        type: 'upload',
+                        source_id: sourceId,
+                    },
+                });
+
+                set((state) => {
+                    state.currentPipelineId = result.pipeline_id;
+                    state.currentVersionId = result.current_version_id;
+                    state.schema = result.schema;
+                    state.steps = [];
+                    state.previewRows = [];
+                    state.materializedRows = [];
+                    state.isCreatingPipeline = false;
+                });
+                trackCompletionLatency('pipeline.create.upload', started, { user_initiated: true });
+                trackProgressFeedback('HP-3', 'source', 'pipeline_created');
 
                 return result;
             } catch (error) {
@@ -175,6 +225,7 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
             });
 
             try {
+                const started = performance.now();
                 const result = await pipelineApi.addStep(currentPipelineId, currentVersionId, {
                     step: {
                         type: stepType,
@@ -195,6 +246,9 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
 
                 // Reload pipeline to get authoritative step list from server
                 await get().loadPipeline(currentPipelineId);
+                trackClick('HP-3', 'transform', 'add_step', { familiar_pattern: true });
+                trackCompletionLatency('pipeline.add_step', started, { stepType, user_initiated: true });
+                trackProgressFeedback('HP-3', 'transform', 'step_applied');
 
                 return result;
             } catch (error) {
@@ -218,6 +272,7 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
             });
 
             try {
+                const started = performance.now();
                 const result = await pipelineApi.materialize(
                     currentPipelineId,
                     currentVersionId,
@@ -229,6 +284,8 @@ export const usePipelineStore = create<PipelineState & PipelineActions>()(
                     state.materializedRows = result.rows;
                     state.isMaterializing = false;
                 });
+                trackCompletionLatency('pipeline.materialize', started, { limit, user_initiated: true });
+                trackProgressFeedback('HP-3', 'transform', 'materialize_complete');
             } catch (error) {
                 set((state) => {
                     state.isMaterializing = false;

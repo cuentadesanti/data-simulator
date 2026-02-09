@@ -1,0 +1,179 @@
+"""Uploaded data source API routes."""
+
+from __future__ import annotations
+
+import os
+from typing import Any
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.auth import require_auth
+from app.core.config import settings
+from app.db import crud, get_db
+from app.services.upload_source import (
+    compute_upload_fingerprint,
+    parse_upload,
+    persist_upload_bytes,
+)
+
+router = APIRouter()
+
+
+class UploadSourceResponse(BaseModel):
+    source_id: str
+    schema: list[dict[str, Any]]
+    row_count_sample: int
+    warnings: list[str]
+
+
+class SourceMetadataResponse(BaseModel):
+    id: str
+    project_id: str
+    filename: str
+    format: str
+    size_bytes: int
+    schema: list[dict[str, Any]]
+    upload_fingerprint: str
+    created_by: str
+    created_at: str
+
+
+class SourceListResponse(BaseModel):
+    sources: list[SourceMetadataResponse]
+
+
+def _require_user_id(user: dict[str, Any]) -> str:
+    user_id = str(user.get("sub", "")).strip()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user_id
+
+
+@router.post("/upload", response_model=UploadSourceResponse, status_code=status.HTTP_201_CREATED)
+async def upload_source(
+    project_id: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: dict[str, Any] = Depends(require_auth),
+) -> UploadSourceResponse:
+    user_id = _require_user_id(user)
+    project = crud.get_project(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    max_size = settings.upload_max_size_mb * 1024 * 1024
+    if len(content) > max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Max {settings.upload_max_size_mb}MB",
+        )
+
+    try:
+        df, schema, fmt = parse_upload(file_bytes=content, filename=file.filename or "upload")
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    fingerprint = compute_upload_fingerprint(content)
+
+    # Create source row first so we can name persisted file by source_id.
+    source = crud.create_uploaded_source(
+        db,
+        project_id=project_id,
+        filename=file.filename or f"upload.{fmt}",
+        format=fmt,
+        size_bytes=len(content),
+        storage_uri="",
+        schema_json=schema,
+        upload_fingerprint=fingerprint,
+        created_by=user_id,
+    )
+    storage_uri = persist_upload_bytes(source.id, fmt, content)
+    source.storage_uri = storage_uri
+    db.commit()
+    db.refresh(source)
+
+    return UploadSourceResponse(
+        source_id=source.id,
+        schema=schema,
+        row_count_sample=min(len(df), 1000),
+        warnings=[],
+    )
+
+
+@router.get("/{source_id}", response_model=SourceMetadataResponse)
+def get_source(
+    source_id: str,
+    db: Session = Depends(get_db),
+    user: dict[str, Any] = Depends(require_auth),
+) -> SourceMetadataResponse:
+    user_id = _require_user_id(user)
+    source = crud.get_uploaded_source(db, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+    if source.created_by != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return SourceMetadataResponse(
+        id=source.id,
+        project_id=source.project_id,
+        filename=source.filename,
+        format=source.format,
+        size_bytes=source.size_bytes,
+        schema=source.schema_json,
+        upload_fingerprint=source.upload_fingerprint,
+        created_by=source.created_by,
+        created_at=source.created_at.isoformat(),
+    )
+
+
+@router.get("", response_model=SourceListResponse)
+def list_sources(
+    project_id: str,
+    db: Session = Depends(get_db),
+    user: dict[str, Any] = Depends(require_auth),
+) -> SourceListResponse:
+    user_id = _require_user_id(user)
+    rows = crud.list_uploaded_sources(db, project_id=project_id, created_by=user_id)
+    return SourceListResponse(
+        sources=[
+            SourceMetadataResponse(
+                id=source.id,
+                project_id=source.project_id,
+                filename=source.filename,
+                format=source.format,
+                size_bytes=source.size_bytes,
+                schema=source.schema_json,
+                upload_fingerprint=source.upload_fingerprint,
+                created_by=source.created_by,
+                created_at=source.created_at.isoformat(),
+            )
+            for source in rows
+        ]
+    )
+
+
+@router.delete("/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_source(
+    source_id: str,
+    db: Session = Depends(get_db),
+    user: dict[str, Any] = Depends(require_auth),
+) -> None:
+    user_id = _require_user_id(user)
+    source = crud.get_uploaded_source(db, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+    if source.created_by != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if source.storage_uri:
+        try:
+            os.remove(source.storage_uri)
+        except FileNotFoundError:
+            pass
+
+    crud.delete_uploaded_source(db, source)

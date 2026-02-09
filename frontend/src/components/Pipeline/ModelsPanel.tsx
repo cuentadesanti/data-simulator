@@ -2,7 +2,7 @@
  * ModelsPanel component for training and viewing ML models.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Brain,
     Play,
@@ -146,7 +146,11 @@ const getChoiceValue = (
     return matchedChoice ?? choice;
 };
 
-export const ModelsPanel = () => {
+interface ModelsPanelProps {
+    className?: string;
+}
+
+export const ModelsPanel = ({ className = '' }: ModelsPanelProps) => {
     const schema = usePipelineStore(selectPipelineSchema);
     const currentVersionId = usePipelineStore(selectCurrentVersionId);
 
@@ -185,6 +189,7 @@ export const ModelsPanel = () => {
     // Saved configuration controls (transient UI state)
     const [configName, setConfigName] = useState('');
     const [showSavedConfigs, setShowSavedConfigs] = useState(true);
+    const fitHandlerRef = useRef<() => void>(() => {});
 
     useEffect(() => {
         fetchModelTypes();
@@ -309,6 +314,15 @@ export const ModelsPanel = () => {
             setIsFitting(false);
         }
     };
+    fitHandlerRef.current = () => {
+        void handleFit();
+    };
+
+    useEffect(() => {
+        const handleWorkspaceFit = () => fitHandlerRef.current();
+        window.addEventListener('workspace-fit-model', handleWorkspaceFit);
+        return () => window.removeEventListener('workspace-fit-model', handleWorkspaceFit);
+    }, []);
 
     const modelOptions = modelTypes.map(
         (model): DropdownOption<string> => ({
@@ -328,7 +342,7 @@ export const ModelsPanel = () => {
         currentModelType?.coming_soon;
 
     return (
-        <div className="bg-white border-l border-gray-200 w-80 flex flex-col h-full">
+        <div className={`bg-white border-l border-gray-200 w-80 flex flex-col h-full ${className}`}>
             {/* Header */}
             <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
                 <Brain size={16} className="text-purple-500" />

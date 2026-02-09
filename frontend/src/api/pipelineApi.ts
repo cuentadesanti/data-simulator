@@ -20,10 +20,15 @@ export interface SimulationSource {
     sample_size: number;
 }
 
+export interface UploadSource {
+    type: 'upload';
+    source_id: string;
+}
+
 export interface CreatePipelineRequest {
     project_id: string;
     name: string;
-    source: SimulationSource;
+    source: SimulationSource | UploadSource;
 }
 
 export interface CreatePipelineResponse {
