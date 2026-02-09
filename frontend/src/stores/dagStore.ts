@@ -11,7 +11,9 @@ import type {
   ValidationError,
   Viewport,
 } from '../types/dag';
+import { trackClick } from '../services/telemetry';
 
+// Deprecated with workspace cutover; kept only for legacy layout fallback.
 type MainTabId = 'dag' | 'data' | 'pipeline';
 
 interface DAGState {
@@ -34,7 +36,7 @@ interface DAGState {
   isGenerating: boolean;
   validationErrors: string[];
   structuredErrors: ValidationError[];
-  activeMainTab: MainTabId;
+  activeMainTab: MainTabId; // Deprecated
 
   // Preview data
   previewData: Record<string, unknown>[] | null;
@@ -82,7 +84,7 @@ interface DAGActions {
   setPreviewData: (data: Record<string, unknown>[] | null, columns?: string[] | null) => void;
   setEdgeStatuses: (statuses: EdgeValidation[], missing: MissingEdge[]) => void;
   setLastValidationResult: (result: 'valid' | 'invalid' | 'pending' | null) => void;
-  setActiveMainTab: (tab: MainTabId) => void;
+  setActiveMainTab: (tab: MainTabId) => void; // Deprecated
   setViewportRestored: () => void;
 
   // Import/Export
@@ -133,6 +135,7 @@ export const useDAGStore = create<DAGState & DAGActions>()(
     ...initialState,
 
     addNode: (config, position) => {
+      trackClick('HP-1', 'source', 'dag_add_node', { familiar_pattern: true });
       const id = config.id || generateId();
       const newNode: FlowNode = {
         id,
@@ -164,6 +167,7 @@ export const useDAGStore = create<DAGState & DAGActions>()(
     },
 
     updateNode: (nodeId, config) => {
+      trackClick('HP-1', 'source', 'dag_update_node', { familiar_pattern: true });
       set((state) => {
         const node = state.nodes.find((n) => n.id === nodeId);
         if (node) {
@@ -179,6 +183,7 @@ export const useDAGStore = create<DAGState & DAGActions>()(
     },
 
     deleteNode: (nodeId) => {
+      trackClick('HP-1', 'source', 'dag_delete_node', { familiar_pattern: true });
       set((state) => {
         state.nodes = state.nodes.filter((n) => n.id !== nodeId);
         state.edges = state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId);
@@ -208,6 +213,7 @@ export const useDAGStore = create<DAGState & DAGActions>()(
     },
 
     addEdge: (source, target) => {
+      trackClick('HP-1', 'source', 'dag_add_edge', { familiar_pattern: true });
       const edgeId = `${source}->${target}`;
       set((state) => {
         // Prevent duplicate edges
@@ -227,6 +233,7 @@ export const useDAGStore = create<DAGState & DAGActions>()(
     },
 
     deleteEdge: (edgeId) => {
+      trackClick('HP-1', 'source', 'dag_delete_edge', { familiar_pattern: true });
       set((state) => {
         state.edges = state.edges.filter((e) => e.id !== edgeId);
         // Invalidate validation when DAG changes
@@ -311,6 +318,7 @@ export const useDAGStore = create<DAGState & DAGActions>()(
     },
 
     setActiveMainTab: (tab) => {
+      trackClick(undefined, 'source', `switch_tab_${tab}`);
       set((state) => {
         state.activeMainTab = tab;
       });
@@ -486,4 +494,5 @@ export const selectEdgeStatuses = (state: DAGState & DAGActions) => state.edgeSt
 export const selectMissingEdges = (state: DAGState & DAGActions) => state.missingEdges;
 export const selectLastValidationResult = (state: DAGState & DAGActions) =>
   state.lastValidationResult;
+// Deprecated selector for legacy layout fallback.
 export const selectActiveMainTab = (state: DAGState & DAGActions) => state.activeMainTab;

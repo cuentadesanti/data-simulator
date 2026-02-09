@@ -4,6 +4,12 @@ import { enableMapSet } from 'immer';
 import type { CreateProjectRequest, Project, ProjectVersion } from '../types/project';
 import { projectsApi } from '../services/api';
 import { useDAGStore } from './dagStore';
+import {
+  trackClick,
+  trackCompletionLatency,
+  trackFlowStart,
+  trackProgressFeedback,
+} from '../services/telemetry';
 
 // Enable Immer support for Map and Set
 enableMapSet();
@@ -119,6 +125,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
     // Select a project and load its current version
     selectProject: async (projectId: string) => {
+      const started = performance.now();
       const dagStore = useDAGStore.getState();
 
       try {
@@ -145,6 +152,9 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
         // Persist to localStorage
         localStorage.setItem(CURRENT_PROJECT_KEY, projectId);
+        trackFlowStart('HP-2');
+        trackClick('HP-2', 'source', 'select_project', { familiar_pattern: true });
+        trackCompletionLatency('project.select', started, { user_initiated: true });
       } catch (error) {
         console.error('Failed to load project:', error);
         throw error;
@@ -180,6 +190,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
 
     // Create a new project (starts with empty DAG)
     createProject: async (name: string, description?: string) => {
+      const started = performance.now();
       const dagStore = useDAGStore.getState();
 
       // Clear the current DAG to start fresh
@@ -210,6 +221,9 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
         state.lastSavedState = dagSnapshot;
         state.expandedProjectIds.add(project.id);
       });
+      trackClick('HP-1', 'source', 'create_project', { familiar_pattern: true });
+      trackCompletionLatency('project.create', started, { user_initiated: true });
+      trackProgressFeedback('HP-1', 'source', 'project_created');
 
       return project;
     },
@@ -269,6 +283,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
       });
 
       try {
+        const started = performance.now();
         const dagStore = useDAGStore.getState();
         const dag = dagStore.exportDAG();
 
@@ -291,6 +306,8 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
             project.updated_at = new Date().toISOString();
           }
         });
+        trackClick('HP-2', 'publish', 'save_current_version', { familiar_pattern: true });
+        trackCompletionLatency('project.save_current', started, { user_initiated: true });
       } catch (error) {
         set((state) => {
           state.isSaving = false;
@@ -311,6 +328,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
       });
 
       try {
+        const started = performance.now();
         const dagStore = useDAGStore.getState();
         const dag = dagStore.exportDAG();
 
@@ -337,6 +355,8 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
         });
 
         await get().fetchProjects();
+        trackClick('HP-2', 'publish', 'save_new_version', { familiar_pattern: true });
+        trackCompletionLatency('project.save_new', started, { user_initiated: true });
         return version;
       } catch (error) {
         set((state) => {

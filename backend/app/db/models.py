@@ -187,6 +187,9 @@ class PipelineVersion(Base):
     
     # Source information (for simulation source type)
     source_dag_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_upload_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("uploaded_sources.id", ondelete="SET NULL"), nullable=True
+    )
     source_seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source_sample_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     
@@ -206,6 +209,7 @@ class PipelineVersion(Base):
         back_populates="versions",
         foreign_keys=[pipeline_id],
     )
+    source_upload: Mapped["UploadedSource | None"] = relationship("UploadedSource")
     
     # Relationship to model fits
     model_fits: Mapped[list["ModelFit"]] = relationship(
@@ -271,3 +275,62 @@ class ModelFit(Base):
 
     def __repr__(self) -> str:
         return f"<ModelFit(id={self.id}, name={self.name}, model_type={self.model_type})>"
+
+
+class UploadedSource(Base):
+    """Uploaded data source metadata and storage reference."""
+
+    __tablename__ = "uploaded_sources"
+    __table_args__ = (
+        Index("ix_uploaded_sources_project_id", "project_id"),
+        Index("ix_uploaded_sources_created_by", "created_by"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    format: Mapped[str] = mapped_column(String(20), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_uri: Mapped[str] = mapped_column(String(500), nullable=False)
+    schema_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    upload_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    project: Mapped["Project"] = relationship("Project")
+
+    def __repr__(self) -> str:
+        return f"<UploadedSource(id={self.id}, project_id={self.project_id}, format={self.format})>"
+
+
+class UXEvent(Base):
+    """Telemetry event for UX KPI computation."""
+
+    __tablename__ = "ux_events"
+    __table_args__ = (
+        Index("ix_ux_events_created_at", "created_at"),
+        Index("ix_ux_events_user_id", "user_id"),
+        Index("ix_ux_events_path_id", "path_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    path_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    stage: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    action: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Attribute name avoids clashing with SQLAlchemy's Declarative metadata.
+    event_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<UXEvent(id={self.id}, type={self.event_type}, path_id={self.path_id})>"

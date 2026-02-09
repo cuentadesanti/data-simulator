@@ -1,0 +1,31 @@
+name: KPI Gate
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  kpi-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build KPI scorecard from fixture telemetry
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/telemetry-events.json <<'JSON'
+          { "events": [] }
+          JSON
+          python scripts/kpi_scorecard.py \
+            --events artifacts/telemetry-events.json \
+            --out-json artifacts/kpi-scorecard.json \
+            --out-md artifacts/kpi-scorecard.md
+
+      - name: Enforce KPI gate
+        run: python scripts/kpi_gate_check.py --scorecard artifacts/kpi-scorecard.json --phase phase1
