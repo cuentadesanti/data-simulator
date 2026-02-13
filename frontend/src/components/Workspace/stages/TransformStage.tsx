@@ -15,6 +15,9 @@ import { useSourceStore } from '../../../stores/sourceStore';
 import { useProjectStore } from '../../../stores/projectStore';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 
+const DEFAULT_PIPELINE_SEED = 42;
+const DEFAULT_PIPELINE_SAMPLE_SIZE = 1000;
+
 export const TransformStage = () => {
   const currentPipelineId = usePipelineStore(selectCurrentPipelineId);
   const createPipelineFromSimulation = usePipelineStore((state) => state.createPipelineFromSimulation);
@@ -57,8 +60,8 @@ export const TransformStage = () => {
       currentProjectId,
       `Pipeline ${new Date().toISOString().slice(0, 10)}`,
       dagVersionId,
-      42,
-      1000,
+      DEFAULT_PIPELINE_SEED,
+      DEFAULT_PIPELINE_SAMPLE_SIZE,
       { trackClick: false, userInitiated: false, pathId: 'HP-1' }
     );
   };
