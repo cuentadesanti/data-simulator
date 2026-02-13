@@ -18,7 +18,7 @@ router = APIRouter()
 
 
 class UXEventIn(BaseModel):
-    event_type: str
+    event_type: str = Field(max_length=100)
     path_id: str | None = None
     stage: str | None = None
     action: str | None = None
@@ -27,7 +27,7 @@ class UXEventIn(BaseModel):
 
 
 class UXEventsBatchIn(BaseModel):
-    events: list[UXEventIn]
+    events: list[UXEventIn] = Field(max_length=500)
 
 
 class UXEventsIngestResponse(BaseModel):
