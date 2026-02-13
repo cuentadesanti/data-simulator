@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from statistics import quantiles
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
