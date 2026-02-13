@@ -15,9 +15,18 @@ from app.services.schema_inference import infer_schema_from_df
 
 
 def ensure_upload_dir() -> Path:
-    path = Path(settings.upload_storage_path)
+    path = Path(settings.upload_storage_path).resolve()
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def validate_storage_path(storage_uri: str) -> Path:
+    """Ensure storage_uri is inside the configured upload directory."""
+    upload_dir = Path(settings.upload_storage_path).resolve()
+    target = Path(storage_uri).resolve()
+    if not str(target).startswith(str(upload_dir) + os.sep) and target != upload_dir:
+        raise ValueError("Invalid storage path")
+    return target
 
 
 def compute_upload_fingerprint(file_bytes: bytes) -> str:
@@ -65,6 +74,7 @@ def persist_upload_bytes(source_id: str, fmt: str, file_bytes: bytes) -> str:
 
 
 def load_upload_dataframe(storage_uri: str, fmt: str) -> pd.DataFrame:
+    validate_storage_path(storage_uri)
     if not os.path.exists(storage_uri):
         raise ValueError("Source file no longer exists")
     if fmt == "csv":
