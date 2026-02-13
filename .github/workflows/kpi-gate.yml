@@ -17,6 +17,9 @@ jobs:
           python-version: "3.11"
 
       - name: Build KPI scorecard from fixture telemetry
+        # Phase 0: Using empty fixture to validate pipeline runs.
+        # TODO: Replace with telemetry captured from Playwright e2e runs
+        #       once instrumentation is connected to test harness.
         run: |
           mkdir -p artifacts
           cat > artifacts/telemetry-events.json <<'JSON'
