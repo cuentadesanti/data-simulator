@@ -18,6 +18,15 @@ import {
 import { useShareVersion } from '../../hooks/useShareVersion';
 import type { DAGDefinition } from '../../types/dag';
 
+// Counts: stage-bar primary buttons + GlobalHeader buttons (Save + Share = 2).
+const HEADER_ACTIONS = 2;
+const STAGE_BAR_COUNTS: Record<string, number> = {
+  source: 3,    // AddNode, Generate Preview, Change Source
+  transform: 3, // Generate Preview, Add Step, Materialize
+  model: 1,     // Fit Model
+  publish: 2,   // Download CSV, Share
+};
+
 export const StageActionBar = () => {
   const stage = useWorkspaceStore((state) => state.activeStage);
   const exportDAG = useDAGStore((state) => state.exportDAG);
@@ -36,17 +45,8 @@ export const StageActionBar = () => {
   const { addToast } = useToast();
   const { isSharing, shareVersion } = useShareVersion();
 
-  // Emit visible-actions snapshot once per stage change.
-  // Counts: stage-bar primary buttons + GlobalHeader buttons (Save + Share = 2).
-  const HEADER_ACTIONS = 2; // Save, Share (always visible)
-  const stageBarCounts: Record<string, number> = {
-    source: 3,    // AddNode, Generate Preview, Change Source
-    transform: 3, // Generate Preview, Add Step, Materialize
-    model: 1,     // Fit Model
-    publish: 2,   // Download CSV, Share
-  };
   useEffect(() => {
-    const count = (stageBarCounts[stage] ?? 0) + HEADER_ACTIONS;
+    const count = (STAGE_BAR_COUNTS[stage] ?? 0) + HEADER_ACTIONS;
     trackVisibleActions(stage, count);
   }, [stage]);
 
