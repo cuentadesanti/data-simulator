@@ -1,8 +1,9 @@
 import logging
 from functools import lru_cache
+from typing import Any
 
 import jwt
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, status
 from jwt import PyJWKClient
 
 from app.core.config import settings
@@ -111,6 +112,14 @@ async def require_auth(request: Request) -> dict:
         # In production, return generic error to avoid leaking implementation details
         detail = "Not authenticated" if settings.environment == "prod" else f"Authentication failed: {str(e)}"
         raise HTTPException(status_code=401, detail=detail)
+
+def require_user_id(user: dict[str, Any]) -> str:
+    """Extract and validate user ID from auth payload."""
+    user_id = str(user.get("sub", "")).strip()
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return user_id
+
 
 # Alias for compatibility
 verify_token = require_auth
