@@ -1,6 +1,6 @@
 # UX Refactor Plan (KPI-Driven)
 
-This plan is sequenced by KPI thresholds defined in `/Users/cuentadesanti/code/data-simulator/docs/ux-kpi-thresholds.md`.
+This plan is sequenced by KPI thresholds defined in `docs/ux-kpi-thresholds.md`.
 
 ## Goal
 Ship a less clunky workspace by reducing click tax, removing forced orchestration, reclaiming space, and eliminating confusing states (especially anonymous pipeline bootstrap).
