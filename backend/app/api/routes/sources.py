@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import os
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -16,7 +18,10 @@ from app.services.upload_source import (
     compute_upload_fingerprint,
     parse_upload,
     persist_upload_bytes,
+    validate_storage_path,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -180,8 +185,9 @@ def delete_source(
 
     if source.storage_uri:
         try:
-            os.remove(source.storage_uri)
-        except FileNotFoundError:
-            pass
+            validated = validate_storage_path(source.storage_uri)
+            validated.unlink(missing_ok=True)
+        except (OSError, ValueError) as exc:
+            logger.warning("Failed to remove source file: %s", exc)
 
     crud.delete_uploaded_source(db, source)
