@@ -60,7 +60,7 @@ async def upload_source(
     user_id = require_user_id(user)
     project = crud.get_project(db, project_id)
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
     max_size = settings.upload_max_size_mb * 1024 * 1024
     chunks: list[bytes] = []
@@ -72,19 +72,19 @@ async def upload_source(
         total += len(chunk)
         if total > max_size:
             raise HTTPException(
-                status_code=413,
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail=f"File too large. Max {settings.upload_max_size_mb}MB",
             )
         chunks.append(chunk)
 
     content = b"".join(chunks)
     if not content:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
 
     try:
         df, schema, fmt = parse_upload(file_bytes=content, filename=file.filename or "upload")
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
     fingerprint = compute_upload_fingerprint(content)
 
@@ -131,9 +131,9 @@ def get_source(
     user_id = require_user_id(user)
     source = crud.get_uploaded_source(db, source_id)
     if not source:
-        raise HTTPException(status_code=404, detail="Source not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
     if source.created_by != user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return SourceMetadataResponse(
         id=source.id,
         project_id=source.project_id,
@@ -182,9 +182,9 @@ def delete_source(
     user_id = require_user_id(user)
     source = crud.get_uploaded_source(db, source_id)
     if not source:
-        raise HTTPException(status_code=404, detail="Source not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
     if source.created_by != user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
     if source.storage_uri:
         try:
