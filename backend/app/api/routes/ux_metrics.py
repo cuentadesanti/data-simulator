@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_auth
+from app.core.auth import require_auth, require_user_id
 from app.db import crud, get_db
 
 router = APIRouter()
@@ -40,12 +40,6 @@ class KPISnapshotResponse(BaseModel):
     kpis: dict[str, float]
 
 
-def _require_user_id(user: dict[str, Any]) -> str:
-    user_id = str(user.get("sub", "")).strip()
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    return user_id
-
 
 @router.post("/events", response_model=UXEventsIngestResponse)
 def ingest_ux_events(
@@ -53,7 +47,7 @@ def ingest_ux_events(
     db: Session = Depends(get_db),
     user: dict[str, Any] = Depends(require_auth),
 ) -> UXEventsIngestResponse:
-    user_id = _require_user_id(user)
+    user_id = require_user_id(user)
     ingested = crud.create_ux_events(
         db,
         user_id=user_id,
@@ -68,7 +62,7 @@ def get_kpi_snapshot(
     db: Session = Depends(get_db),
     user: dict[str, Any] = Depends(require_auth),
 ) -> KPISnapshotResponse:
-    user_id = _require_user_id(user)
+    user_id = require_user_id(user)
     since_dt = datetime.now(UTC) - timedelta(hours=window)
     events = crud.list_ux_events(db, user_id=user_id, since_dt=since_dt)
 

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_auth
+from app.core.auth import require_auth, require_user_id
 from app.core.config import settings
 from app.db import crud, get_db
 from app.services.upload_source import (
@@ -49,12 +49,6 @@ class SourceListResponse(BaseModel):
     sources: list[SourceMetadataResponse]
 
 
-def _require_user_id(user: dict[str, Any]) -> str:
-    user_id = str(user.get("sub", "")).strip()
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return user_id
-
 
 @router.post("/upload", response_model=UploadSourceResponse, status_code=status.HTTP_201_CREATED)
 async def upload_source(
@@ -63,7 +57,7 @@ async def upload_source(
     db: Session = Depends(get_db),
     user: dict[str, Any] = Depends(require_auth),
 ) -> UploadSourceResponse:
-    user_id = _require_user_id(user)
+    user_id = require_user_id(user)
     project = crud.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -134,7 +128,7 @@ def get_source(
     db: Session = Depends(get_db),
     user: dict[str, Any] = Depends(require_auth),
 ) -> SourceMetadataResponse:
-    user_id = _require_user_id(user)
+    user_id = require_user_id(user)
     source = crud.get_uploaded_source(db, source_id)
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
@@ -159,7 +153,7 @@ def list_sources(
     db: Session = Depends(get_db),
     user: dict[str, Any] = Depends(require_auth),
 ) -> SourceListResponse:
-    user_id = _require_user_id(user)
+    user_id = require_user_id(user)
     rows = crud.list_uploaded_sources(db, project_id=project_id, created_by=user_id)
     return SourceListResponse(
         sources=[
@@ -185,7 +179,7 @@ def delete_source(
     db: Session = Depends(get_db),
     user: dict[str, Any] = Depends(require_auth),
 ) -> None:
-    user_id = _require_user_id(user)
+    user_id = require_user_id(user)
     source = crud.get_uploaded_source(db, source_id)
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
