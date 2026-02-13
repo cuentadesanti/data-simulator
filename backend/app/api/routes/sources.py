@@ -94,22 +94,31 @@ async def upload_source(
 
     fingerprint = compute_upload_fingerprint(content)
 
-    # Create source row first so we can name persisted file by source_id.
-    source = crud.create_uploaded_source(
-        db,
-        project_id=project_id,
-        filename=file.filename or f"upload.{fmt}",
-        format=fmt,
-        size_bytes=len(content),
-        storage_uri="",
-        schema_json=schema,
-        upload_fingerprint=fingerprint,
-        created_by=user_id,
-    )
-    storage_uri = persist_upload_bytes(source.id, fmt, content)
-    source.storage_uri = storage_uri
-    db.commit()
-    db.refresh(source)
+    # Persist file first, then create DB row to avoid orphaned rows.
+    from app.db.models import generate_uuid
+
+    source_id = generate_uuid()
+    storage_uri = persist_upload_bytes(source_id, fmt, content)
+
+    try:
+        source = crud.create_uploaded_source(
+            db,
+            id=source_id,
+            project_id=project_id,
+            filename=file.filename or f"upload.{fmt}",
+            file_format=fmt,
+            size_bytes=len(content),
+            storage_uri=storage_uri,
+            schema_json=schema,
+            upload_fingerprint=fingerprint,
+            created_by=user_id,
+        )
+    except Exception:
+        try:
+            os.remove(storage_uri)
+        except OSError:
+            pass
+        raise
 
     return UploadSourceResponse(
         source_id=source.id,

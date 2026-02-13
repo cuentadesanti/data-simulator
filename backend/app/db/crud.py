@@ -295,25 +295,29 @@ def _build_dag_diff(previous_dag: dict[str, Any], current_dag: dict[str, Any]) -
 def create_uploaded_source(
     db: Session,
     *,
+    id: str | None = None,
     project_id: str,
     filename: str,
-    format: str,
+    file_format: str,
     size_bytes: int,
     storage_uri: str,
     schema_json: list[dict[str, Any]],
     upload_fingerprint: str,
     created_by: str,
 ) -> UploadedSource:
-    source = UploadedSource(
+    kwargs: dict[str, Any] = dict(
         project_id=project_id,
         filename=filename,
-        format=format,
+        format=file_format,
         size_bytes=size_bytes,
         storage_uri=storage_uri,
         schema_json=schema_json,
         upload_fingerprint=upload_fingerprint,
         created_by=created_by,
     )
+    if id is not None:
+        kwargs["id"] = id
+    source = UploadedSource(**kwargs)
     db.add(source)
     db.commit()
     db.refresh(source)
