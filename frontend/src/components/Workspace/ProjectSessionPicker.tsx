@@ -12,6 +12,7 @@ import { NewProjectDialog } from '../ProjectSidebar/NewProjectDialog';
 
 export const ProjectSessionPicker = () => {
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
+  const [versionError, setVersionError] = useState<string | null>(null);
   const projects = useProjectStore(selectProjects);
   const currentProjectId = useProjectStore(selectCurrentProjectId);
   const currentVersionId = useProjectStore(selectCurrentVersionId);
@@ -23,8 +24,10 @@ export const ProjectSessionPicker = () => {
 
   useEffect(() => {
     if (!currentProjectId || currentProject?.versions) return;
+    setVersionError(null);
     void fetchVersions(currentProjectId).catch((error) => {
       console.error('Failed to load project versions:', error);
+      setVersionError('Failed to load versions');
     });
   }, [currentProject?.versions, currentProjectId, fetchVersions]);
 
@@ -99,6 +102,9 @@ export const ProjectSessionPicker = () => {
           size="sm"
           className="w-44"
         />
+        {versionError && (
+          <span className="text-xs text-red-500">{versionError}</span>
+        )}
         <button
           type="button"
           onClick={() => setShowNewProjectDialog(true)}
