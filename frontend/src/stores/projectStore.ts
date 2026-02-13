@@ -55,6 +55,46 @@ function hasDagNodes(dag: unknown): dag is { nodes: unknown[] } {
   return !!dag && typeof dag === 'object' && Array.isArray((dag as { nodes?: unknown[] }).nodes);
 }
 
+async function resolveSourceType(
+  projectId: string,
+  dagData: unknown,
+  preferredSource: PreferredSourceType | null,
+): Promise<PreferredSourceType | null> {
+  if (hasDagNodes(dagData) && dagData.nodes.length > 0) {
+    return 'dag';
+  }
+  if (preferredSource) {
+    return preferredSource;
+  }
+  try {
+    const uploads = await sourcesApi.list(projectId);
+    if (uploads.length > 0) {
+      return 'upload';
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+function applyResolvedSource(
+  projectId: string,
+  resolved: PreferredSourceType | null,
+  setProjectSourceType: (projectId: string, sourceType: PreferredSourceType) => void,
+) {
+  const sourceStore = useSourceStore.getState();
+  if (resolved === 'dag') {
+    sourceStore.setSourceType('dag');
+    setProjectSourceType(projectId, 'dag');
+  } else if (resolved === 'upload') {
+    sourceStore.setSourceType('upload');
+    setProjectSourceType(projectId, 'upload');
+  } else {
+    sourceStore.clearSource();
+  }
+  useWorkspaceStore.getState().setActiveStage('source');
+}
+
 interface ProjectState {
   // Project list
   projects: Project[];
@@ -195,33 +235,8 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
         localStorage.setItem(CURRENT_PROJECT_KEY, projectId);
 
         const preferredSource = get().projectSourceTypeByProjectId[projectId] ?? null;
-        let resolvedSource: PreferredSourceType | null = null;
-        if (hasDagNodes(project.current_dag) && project.current_dag.nodes.length > 0) {
-          resolvedSource = 'dag';
-        } else if (preferredSource) {
-          resolvedSource = preferredSource;
-        } else {
-          try {
-            const uploads = await sourcesApi.list(projectId);
-            if (uploads.length > 0) {
-              resolvedSource = 'upload';
-            }
-          } catch {
-            resolvedSource = null;
-          }
-        }
-
-        const sourceStore = useSourceStore.getState();
-        if (resolvedSource === 'dag') {
-          sourceStore.setSourceType('dag');
-          get().setProjectSourceType(projectId, 'dag');
-        } else if (resolvedSource === 'upload') {
-          sourceStore.setSourceType('upload');
-          get().setProjectSourceType(projectId, 'upload');
-        } else {
-          sourceStore.clearSource();
-        }
-        useWorkspaceStore.getState().setActiveStage('source');
+        const resolved = await resolveSourceType(projectId, project.current_dag, preferredSource);
+        applyResolvedSource(projectId, resolved, get().setProjectSourceType);
 
         trackFlowStart('HP-2');
         trackClick('HP-2', 'source', 'select_project', { familiar_pattern: true });
@@ -255,33 +270,8 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
         });
 
         const preferredSource = get().projectSourceTypeByProjectId[projectId] ?? null;
-        let resolvedSource: PreferredSourceType | null = null;
-        if (hasDagNodes(version.dag_definition) && version.dag_definition.nodes.length > 0) {
-          resolvedSource = 'dag';
-        } else if (preferredSource) {
-          resolvedSource = preferredSource;
-        } else {
-          try {
-            const uploads = await sourcesApi.list(projectId);
-            if (uploads.length > 0) {
-              resolvedSource = 'upload';
-            }
-          } catch {
-            resolvedSource = null;
-          }
-        }
-
-        const sourceStore = useSourceStore.getState();
-        if (resolvedSource === 'dag') {
-          sourceStore.setSourceType('dag');
-          get().setProjectSourceType(projectId, 'dag');
-        } else if (resolvedSource === 'upload') {
-          sourceStore.setSourceType('upload');
-          get().setProjectSourceType(projectId, 'upload');
-        } else {
-          sourceStore.clearSource();
-        }
-        useWorkspaceStore.getState().setActiveStage('source');
+        const resolved = await resolveSourceType(projectId, version.dag_definition, preferredSource);
+        applyResolvedSource(projectId, resolved, get().setProjectSourceType);
       } catch (error) {
         console.error('Failed to load version:', error);
         throw error;
