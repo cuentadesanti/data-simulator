@@ -63,16 +63,24 @@ async def upload_source(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    content = await file.read()
+    max_size = settings.upload_max_size_mb * 1024 * 1024
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(64 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_size:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Max {settings.upload_max_size_mb}MB",
+            )
+        chunks.append(chunk)
+
+    content = b"".join(chunks)
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
-    max_size = settings.upload_max_size_mb * 1024 * 1024
-    if len(content) > max_size:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Max {settings.upload_max_size_mb}MB",
-        )
 
     try:
         df, schema, fmt = parse_upload(file_bytes=content, filename=file.filename or "upload")
