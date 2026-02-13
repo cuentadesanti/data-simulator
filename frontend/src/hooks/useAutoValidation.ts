@@ -59,8 +59,8 @@ export function useAutoValidation() {
       } finally {
         if (currentRequest === requestIdRef.current) {
           setValidating(false);
+          trackCompletionLatency('dag.validate', started, { user_initiated: false });
         }
-        trackCompletionLatency('dag.validate', started, { user_initiated: false });
       }
     }, DEBOUNCE_MS);
 
