@@ -15,11 +15,14 @@ export interface UXTelemetryEvent {
 const STORAGE_KEY = 'ux-telemetry-buffer-v1';
 const FLUSH_INTERVAL_MS = 30_000;
 const MAX_BATCH_SIZE = 200;
+const MAX_BUFFER_SIZE = 5_000;
+const MAX_CONSECUTIVE_FAILURES = 5;
 
 let buffer: UXTelemetryEvent[] = [];
 let initialized = false;
 let flushTimer: number | null = null;
 let flushing = false;
+let consecutiveFailures = 0;
 
 function loadBuffer() {
   try {
@@ -44,6 +47,7 @@ function persistBuffer() {
 
 async function flushToBackend() {
   if (flushing || buffer.length === 0) return;
+  if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) return;
   flushing = true;
   try {
     const batch = buffer.slice(0, MAX_BATCH_SIZE).map((event) => ({
@@ -57,8 +61,9 @@ async function flushToBackend() {
     await api.post('/api/ux/events', { events: batch });
     buffer = buffer.slice(batch.length);
     persistBuffer();
+    consecutiveFailures = 0;
   } catch {
-    // Keep events for retry.
+    consecutiveFailures++;
   } finally {
     flushing = false;
   }
@@ -85,6 +90,9 @@ export function dispatchTelemetryEvent(event: Omit<UXTelemetryEvent, 'ts'>) {
     ts: Date.now(),
   };
   buffer.push(fullEvent);
+  if (buffer.length > MAX_BUFFER_SIZE) {
+    buffer = buffer.slice(buffer.length - MAX_BUFFER_SIZE);
+  }
   persistBuffer();
 }
 
