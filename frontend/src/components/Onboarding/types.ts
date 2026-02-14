@@ -1,4 +1,4 @@
-export type TourId = 'main' | 'source' | 'transform' | 'model' | 'publish';
+export type TourId = 'main' | 'source' | 'transform' | 'model' | 'publish' | 'inspector';
 export type TooltipPosition = 'top' | 'bottom' | 'left' | 'right';
 export type TourMode = 'guided' | 'reference';
 

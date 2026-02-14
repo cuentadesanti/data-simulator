@@ -83,9 +83,11 @@ export function useTourTrigger() {
     const stageTourDone = useOnboardingStore.getState()[stageKey];
     const definition = tourDefinitions[stageTourId];
 
-    // Check version-based re-trigger
-    const savedVersion = tourVersions[stageTourId] ?? 0;
-    const needsRetrigger = savedVersion < definition.version;
+    // Version-based re-trigger: only when tourVersions has an explicit entry
+    // that's behind the current definition version (set via bumpTourVersion).
+    // No entry means the user hasn't had a version bump → don't re-trigger.
+    const savedVersion = tourVersions[stageTourId];
+    const needsRetrigger = savedVersion !== undefined && savedVersion < definition.version;
 
     if (stageTourDone && !needsRetrigger) return;
 
@@ -115,9 +117,10 @@ export function useTourTrigger() {
     return () => clearTimeout(timer);
   }, [activeStage, mainTourStatus, activeTourId, startTour, tourVersions]);
 
-  // Inspector hint
+  // Inspector hint: show a single-step tour on first node selection
   useEffect(() => {
     if (inspectorHintShown || activeTourId || !selectedNodeId) return;
     markInspectorHintShown();
-  }, [inspectorHintShown, activeTourId, selectedNodeId, markInspectorHintShown]);
+    startTour('inspector', 'guided');
+  }, [inspectorHintShown, activeTourId, selectedNodeId, markInspectorHintShown, startTour]);
 }

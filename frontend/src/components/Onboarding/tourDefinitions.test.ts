@@ -2,11 +2,11 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect } from 'vitest';
-import { tourDefinitions, inspectorHintStep } from './tourDefinitions';
+import { tourDefinitions } from './tourDefinitions';
 import type { TourId } from './types';
 
 describe('tourDefinitions', () => {
-  const allTourIds: TourId[] = ['main', 'source', 'transform', 'model', 'publish'];
+  const allTourIds: TourId[] = ['main', 'source', 'transform', 'model', 'publish', 'inspector'];
 
   it('has definitions for all tour IDs', () => {
     allTourIds.forEach((id) => {
@@ -68,10 +68,11 @@ describe('tourDefinitions', () => {
     });
   });
 
-  it('inspectorHintStep is properly defined', () => {
-    expect(inspectorHintStep.id).toBe('inspector.hint');
-    expect(inspectorHintStep.target).toMatch(/data-tour/);
-    expect(inspectorHintStep.title.length).toBeGreaterThan(0);
+  it('inspector tour is a single-step hint', () => {
+    const inspector = tourDefinitions.inspector;
+    expect(inspector.steps.length).toBe(1);
+    expect(inspector.steps[0].id).toBe('inspector.hint');
+    expect(inspector.steps[0].target).toMatch(/data-tour/);
   });
 
   it('stage tours have completionAction defined', () => {

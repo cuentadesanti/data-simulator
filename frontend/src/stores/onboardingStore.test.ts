@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { useOnboardingStore } from './onboardingStore';
 
 const STORAGE_KEY = 'onboarding-state-v1';

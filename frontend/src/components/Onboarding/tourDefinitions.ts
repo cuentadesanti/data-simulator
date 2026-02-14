@@ -182,12 +182,18 @@ export const tourDefinitions: Record<TourId, TourDefinition> = {
       },
     ],
   },
-};
 
-export const inspectorHintStep = {
-  id: 'inspector.hint',
-  target: '[data-tour="inspector"]',
-  title: 'Inspector',
-  content: 'Select any node to configure it here.',
-  position: 'left' as const,
+  inspector: {
+    id: 'inspector',
+    version: 1,
+    steps: [
+      {
+        id: 'inspector.hint',
+        target: '[data-tour="inspector"]',
+        title: 'Inspector',
+        content: 'Select any node to configure it here.',
+        position: 'left' as const,
+      },
+    ],
+  },
 };

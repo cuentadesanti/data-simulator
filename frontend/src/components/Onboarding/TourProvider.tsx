@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useOnboardingStore } from '../../stores/onboardingStore';
 import { tourDefinitions } from './tourDefinitions';
@@ -7,6 +7,7 @@ import { TourTooltip } from './TourTooltip';
 import { useTourPositioning } from './useTourPositioning';
 import { dispatchTelemetryEvent } from '../../services/telemetry';
 import type { TourId } from './types';
+import { TOUR_Z } from './types';
 
 const STAGE_LABELS: Record<TourId, string> = {
   main: 'Main Tour',
@@ -36,8 +37,15 @@ export const TourProvider = () => {
   const isFloating = step?.floating ?? !step?.target;
   const targetRect = useTourPositioning(isFloating ? null : targetSelector);
 
-  // Track whether we should show skip reminder on this skip
-  const showSkipReminderRef = useRef(false);
+  // Skip reminder renders independently of the tour tooltip
+  const [skipReminderVisible, setSkipReminderVisible] = useState(false);
+
+  // Auto-hide skip reminder after 4s
+  useEffect(() => {
+    if (!skipReminderVisible) return;
+    const timer = setTimeout(() => setSkipReminderVisible(false), 4000);
+    return () => clearTimeout(timer);
+  }, [skipReminderVisible]);
 
   // Telemetry: step viewed
   useEffect(() => {
@@ -56,7 +64,6 @@ export const TourProvider = () => {
 
   const handleNext = useCallback(() => {
     if (!definition) return;
-    showSkipReminderRef.current = false;
 
     if (stepIndex >= definition.steps.length - 1) {
       // Last step — complete
@@ -99,15 +106,17 @@ export const TourProvider = () => {
     });
 
     if (!skipReminderShown) {
-      showSkipReminderRef.current = true;
       markSkipReminderShown();
       dispatchTelemetryEvent({
         event_type: 'tour_skip_reminder',
         metadata: {},
       });
+      // Show reminder *after* tour is dismissed (rendered independently)
+      skipTour();
+      setSkipReminderVisible(true);
+    } else {
+      skipTour();
     }
-
-    skipTour();
   }, [definition, mode, stepIndex, skipReminderShown, skipTour, markSkipReminderShown]);
 
   const handleClose = useCallback(() => {
@@ -118,17 +127,21 @@ export const TourProvider = () => {
     }
   }, [mode, dismissTour, handleSkip]);
 
-  // Clear skip reminder after a short time
-  useEffect(() => {
-    if (showSkipReminderRef.current) {
-      const timer = setTimeout(() => {
-        showSkipReminderRef.current = false;
-      }, 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [activeTourId]); // reset when tour changes
+  // Standalone skip reminder toast (rendered even when no tour is active)
+  const skipReminderElement = skipReminderVisible
+    ? createPortal(
+        <div
+          className="fixed bottom-28 right-4 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 shadow-lg"
+          style={{ zIndex: TOUR_Z.TOOLTIP }}
+        >
+          You can relaunch tours anytime from the{' '}
+          <span className="font-medium text-blue-600">?</span> button.
+        </div>,
+        document.body,
+      )
+    : null;
 
-  if (!activeTourId || !step || !definition) return null;
+  if (!activeTourId || !step || !definition) return skipReminderElement;
 
   const padding = step.spotlightPadding ?? 8;
 
@@ -154,8 +167,8 @@ export const TourProvider = () => {
         onPrev={handlePrev}
         onSkip={handleSkip}
         onClose={handleClose}
-        showSkipReminder={showSkipReminderRef.current}
       />
+      {skipReminderElement}
     </>,
     document.body,
   );

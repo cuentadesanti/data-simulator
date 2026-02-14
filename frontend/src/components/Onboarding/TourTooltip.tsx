@@ -16,7 +16,6 @@ interface TourTooltipProps {
   onPrev: () => void;
   onSkip: () => void;
   onClose: () => void;
-  showSkipReminder: boolean;
 }
 
 const TOOLTIP_GAP = 12;
@@ -86,7 +85,6 @@ export const TourTooltip = ({
   onPrev,
   onSkip,
   onClose,
-  showSkipReminder,
 }: TourTooltipProps) => {
   const tooltipRef = useRef<HTMLDivElement>(null);
   const tooltipRect = tooltipRef.current?.getBoundingClientRect() ?? null;
@@ -200,12 +198,6 @@ export const TourTooltip = ({
         </div>
       </div>
 
-      {/* Skip reminder — shown once on first skip */}
-      {showSkipReminder && (
-        <div className="border-t border-gray-100 px-4 py-2 text-xs text-gray-400">
-          You can relaunch tours anytime from the ? button.
-        </div>
-      )}
     </div>
   );
 };
