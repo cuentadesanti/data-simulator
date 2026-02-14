@@ -110,7 +110,7 @@ export const PipelineAnalysisTabs = ({
     }, [diagnostics]);
 
     return (
-        <div className="h-full flex flex-col bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div data-tour="analysis-tabs" className="h-full flex flex-col bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div className="border-b border-gray-200 px-4">
                 <div className="flex items-center gap-1 overflow-x-auto">
                     {analysisTabs.map((tab) => {

@@ -282,7 +282,7 @@ const DAGCanvas = () => {
   }, [selectNode]);
 
   return (
-    <div className="w-full h-full">
+    <div data-tour="dag-canvas" className="w-full h-full">
       <ReactFlow
         nodes={nodes}
         edges={edges}

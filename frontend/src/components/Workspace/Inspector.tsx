@@ -7,7 +7,7 @@ export const Inspector = () => {
   const activeStage = useWorkspaceStore((state) => state.activeStage);
 
   return (
-    <aside className="h-full w-96 border-l border-gray-200 bg-white overflow-y-auto">
+    <aside data-tour="inspector" className="h-full w-96 border-l border-gray-200 bg-white overflow-y-auto">
       {inspectorView === 'variables' && activeStage === 'source' ? (
         <VariablesPanel />
       ) : inspectorContext?.type === 'node' ? (

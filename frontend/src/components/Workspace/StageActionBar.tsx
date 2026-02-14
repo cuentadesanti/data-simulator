@@ -155,12 +155,13 @@ export const StageActionBar = () => {
   };
 
   return (
-    <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
+    <div data-tour="stage-action-bar" className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
       <div className="flex items-center gap-2">
         {stage === 'source' && <AddNodeDropdown />}
         {(stage === 'source' || stage === 'transform') && (
           <button
             type="button"
+            data-tour="generate-preview-btn"
             onClick={handleGeneratePreview}
             disabled={lastValidationResult === 'invalid' || isGeneratingPreview}
             className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
@@ -206,6 +207,7 @@ export const StageActionBar = () => {
             </button>
             <button
               type="button"
+              data-tour="materialize-btn"
               onClick={handleMaterialize}
               disabled={isMaterializing}
               className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
@@ -217,6 +219,7 @@ export const StageActionBar = () => {
         {stage === 'model' && (
           <button
             type="button"
+            data-tour="fit-model-btn"
             onClick={handleFitModel}
             className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
           >

@@ -39,7 +39,7 @@ export const GlobalHeader = () => {
   };
 
   return (
-    <header className="flex h-12 items-center justify-between border-b border-gray-200 bg-white px-4">
+    <header data-tour="global-header" className="flex h-12 items-center justify-between border-b border-gray-200 bg-white px-4">
       <div className="flex items-center gap-3">
         <h1 className="text-sm font-semibold text-gray-900">
           {currentProject?.name ?? 'Task Workspace'}

@@ -11,6 +11,7 @@ export const LeftRail = () => {
 
   return (
     <aside
+      data-tour="left-rail"
       className={`h-full border-r border-gray-200 bg-white transition-all ${
         collapsed ? 'w-16' : 'w-64'
       }`}

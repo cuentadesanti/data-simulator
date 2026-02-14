@@ -20,7 +20,7 @@ export const StageNav = () => {
   const setActiveStage = useWorkspaceStore((state) => state.setActiveStage);
 
   return (
-    <nav className="flex flex-col gap-1">
+    <nav data-tour="stage-nav" className="flex flex-col gap-1">
       {stages.map((stage) => {
         const isActive = activeStage === stage.id;
         return (
