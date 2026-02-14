@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     output_expiration_hours: int = 24
     max_output_size_mb: int = 500
 
+    # Upload sources
+    upload_max_size_mb: int = 200
+    upload_storage_path: str = "./uploads"
+
     # Database
     database_url: str = "sqlite:///./data_simulator.db"
 

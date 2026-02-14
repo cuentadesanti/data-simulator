@@ -2,7 +2,7 @@
  * FormulaBar component for adding transform steps to a pipeline.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, AlertCircle, ChevronDown, Loader2 } from 'lucide-react';
 import {
     usePipelineStore,
@@ -31,6 +31,7 @@ export const FormulaBar = () => {
     const [suggestions, setSuggestions] = useState<string[]>([]);
     const [focusedIndex, setFocusedIndex] = useState(-1);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const outputColumnRef = useRef<HTMLInputElement>(null);
 
     // Show column suggestions as user types
     const handleExpressionChange = (value: string) => {
@@ -65,6 +66,14 @@ export const FormulaBar = () => {
             refreshTransformsCatalog();
         }
     }, [availableTransforms.length, refreshTransformsCatalog]);
+
+    useEffect(() => {
+        const handleFocusFormula = () => {
+            outputColumnRef.current?.focus();
+        };
+        window.addEventListener('workspace-focus-formula', handleFocusFormula);
+        return () => window.removeEventListener('workspace-focus-formula', handleFocusFormula);
+    }, []);
 
     // Reset form when pipeline changes
     useEffect(() => {
@@ -148,6 +157,7 @@ export const FormulaBar = () => {
 
                 {/* Output column name */}
                 <input
+                    ref={outputColumnRef}
                     type="text"
                     value={outputColumn}
                     onChange={(e) => setOutputColumn(e.target.value)}

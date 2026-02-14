@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.core.auth import require_auth
+from app.db import crud, get_db
 from app.services import pipeline_service
 
 router = APIRouter()
@@ -22,10 +23,17 @@ router = APIRouter()
 class SimulationSource(BaseModel):
     """Source configuration for simulation-based pipeline."""
     
-    type: str = Field("simulation", description="Source type")
+    type: Literal["simulation"] = Field("simulation", description="Source type")
     dag_version_id: str = Field(..., description="ID of the DAG version to use")
     seed: int = Field(..., description="Random seed for reproducibility")
     sample_size: int = Field(..., ge=1, le=100000, description="Number of rows to generate")
+
+
+class UploadSource(BaseModel):
+    """Source configuration for upload-based pipeline."""
+
+    type: Literal["upload"] = Field("upload", description="Source type")
+    source_id: str = Field(..., description="Uploaded source identifier")
 
 
 class PipelineCreateRequest(BaseModel):
@@ -33,7 +41,7 @@ class PipelineCreateRequest(BaseModel):
     
     project_id: str = Field(..., description="ID of the parent project")
     name: str = Field(..., min_length=1, max_length=255, description="Pipeline name")
-    source: SimulationSource = Field(..., description="Source configuration")
+    source: SimulationSource | UploadSource = Field(..., description="Source configuration")
 
 
 class PipelineCreateResponse(BaseModel):
@@ -180,6 +188,7 @@ class PipelineListResponse(BaseModel):
 def create_pipeline(
     request: PipelineCreateRequest,
     db: Session = Depends(get_db),
+    user: dict[str, Any] = Depends(require_auth),
 ) -> PipelineCreateResponse:
     """Create a new pipeline from a simulation source.
     
@@ -187,14 +196,30 @@ def create_pipeline(
     The input schema is inferred from the simulation source.
     """
     try:
+        if isinstance(request.source, UploadSource):
+            user_id = str(user.get("sub", "")).strip()
+            if not user_id:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+            source = crud.get_uploaded_source(db, request.source.source_id)
+            if not source:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
+            if source.created_by != user_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+            if source.project_id != request.project_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Uploaded source must belong to the target project",
+                )
+
         result = pipeline_service.create_pipeline(
             db=db,
             project_id=request.project_id,
             name=request.name,
             source_type=request.source.type,
-            dag_version_id=request.source.dag_version_id,
-            seed=request.source.seed,
-            sample_size=request.source.sample_size,
+            dag_version_id=request.source.dag_version_id if isinstance(request.source, SimulationSource) else None,
+            seed=request.source.seed if isinstance(request.source, SimulationSource) else None,
+            sample_size=request.source.sample_size if isinstance(request.source, SimulationSource) else None,
+            upload_source_id=request.source.source_id if isinstance(request.source, UploadSource) else None,
         )
         return PipelineCreateResponse(
             pipeline_id=result["pipeline_id"],

@@ -14,9 +14,11 @@ from typing import Any
 import pandas as pd
 from sqlalchemy.orm import Session
 
+from app.db import crud
 from app.db.models import Pipeline, PipelineVersion
 from app.services.hashing import fingerprint_source, hash_steps
 from app.services.pipeline_source import (
+    load_source,
     load_simulation_source,
 )
 from app.services.transform_registry import get_transform_registry
@@ -47,9 +49,10 @@ def create_pipeline(
     project_id: str,
     name: str,
     source_type: str,
-    dag_version_id: str,
-    seed: int,
-    sample_size: int,
+    dag_version_id: str | None = None,
+    seed: int | None = None,
+    sample_size: int | None = None,
+    upload_source_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a new pipeline from a simulation source.
     
@@ -71,10 +74,24 @@ def create_pipeline(
         Dict with pipeline_id, version_id, and schema
     """
     # Load source data to infer schema
-    df, input_schema = load_simulation_source(db, dag_version_id, seed, sample_size)
-    
-    # Compute source fingerprint
-    source_fp = fingerprint_source(dag_version_id, seed, sample_size)
+    if source_type == "upload":
+        if not upload_source_id:
+            raise ValueError("upload source requires source_id")
+
+        upload_source = crud.get_uploaded_source(db, upload_source_id)
+        if not upload_source:
+            raise ValueError(f"Uploaded source '{upload_source_id}' not found")
+        if upload_source.project_id != project_id:
+            raise ValueError("Uploaded source does not belong to this project")
+
+        input_schema = upload_source.schema_json
+        source_fp = upload_source.upload_fingerprint
+    else:
+        if not dag_version_id or seed is None or sample_size is None:
+            raise ValueError("simulation source requires dag_version_id, seed, sample_size")
+        _, input_schema = load_simulation_source(db, dag_version_id, seed, sample_size)
+        # Compute source fingerprint
+        source_fp = fingerprint_source(dag_version_id, seed, sample_size)
     
     # Compute steps hash (empty list)
     empty_steps_hash = hash_steps([])
@@ -97,6 +114,7 @@ def create_pipeline(
         output_schema=input_schema.copy(),  # Initially same as input
         lineage=[],
         source_dag_version_id=dag_version_id,
+        source_upload_id=upload_source_id,
         source_seed=seed,
         source_sample_size=sample_size,
         source_fingerprint=source_fp,
@@ -239,6 +257,7 @@ def add_step(
         output_schema=new_output_schema,
         lineage=new_lineage,
         source_dag_version_id=version.source_dag_version_id,
+        source_upload_id=version.source_upload_id,
         source_seed=version.source_seed,
         source_sample_size=version.source_sample_size,
         source_fingerprint=version.source_fingerprint,
@@ -431,11 +450,12 @@ def _materialize_to_df(db: Session, version: PipelineVersion) -> pd.DataFrame:
     Loads source data and applies all steps in order.
     """
     # Load source data
-    df, _ = load_simulation_source(
+    df, _ = load_source(
         db,
-        version.source_dag_version_id,
-        version.source_seed,
-        version.source_sample_size,
+        source_dag_version_id=version.source_dag_version_id,
+        source_upload_id=version.source_upload_id,
+        source_seed=version.source_seed,
+        source_sample_size=version.source_sample_size,
     )
     
     # Apply steps in order
@@ -660,6 +680,8 @@ def resimulate(
     pipeline = db.get(Pipeline, pipeline_id)
     if not pipeline:
         raise ValueError(f"Pipeline {pipeline_id} not found")
+    if version.source_upload_id:
+        raise ValueError("Resimulate is only supported for simulation-backed pipelines")
     
     # Load new source to get schema
     df, input_schema = load_simulation_source(
@@ -700,6 +722,7 @@ def resimulate(
         output_schema=output_schema,
         lineage=version.lineage,  # Copy lineage
         source_dag_version_id=version.source_dag_version_id,
+        source_upload_id=None,
         source_seed=seed,
         source_sample_size=sample_size,
         source_fingerprint=source_fp,

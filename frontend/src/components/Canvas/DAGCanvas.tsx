@@ -118,8 +118,8 @@ const DAGCanvas = () => {
         stroke: '#64748b', // slate-500
       };
       let animated = false;
-      let labelStyle = {};
-      let label = '';
+      const labelStyle = {};
+      const label = '';
 
       if (status === 'used') {
         // Used edges: solid green

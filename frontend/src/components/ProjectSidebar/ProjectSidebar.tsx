@@ -8,7 +8,11 @@ import {
 import { ProjectItem } from './ProjectItem';
 import { NewProjectDialog } from './NewProjectDialog';
 
-export function ProjectSidebar() {
+interface ProjectSidebarProps {
+  initializeOnMount?: boolean;
+}
+
+export function ProjectSidebar({ initializeOnMount = true }: ProjectSidebarProps) {
   const projects = useProjectStore(selectProjects);
   const sidebarOpen = useProjectStore(selectSidebarOpen);
   const isLoading = useProjectStore(selectIsLoadingProjects);
@@ -20,12 +24,13 @@ export function ProjectSidebar() {
 
   // Fetch projects and restore current project on mount
   useEffect(() => {
+    if (!initializeOnMount) return;
     const init = async () => {
       await fetchProjects();
       await restoreCurrentProject();
     };
-    init();
-  }, [fetchProjects, restoreCurrentProject]);
+    void init();
+  }, [fetchProjects, initializeOnMount, restoreCurrentProject]);
 
   // Sort projects by updated_at descending
   const sortedProjects = [...projects].sort(

@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api.routes import dag, distributions, modeling, pipelines, projects, public, transforms
+from app.api.routes import dag, distributions, modeling, pipelines, projects, public, sources, transforms, ux_metrics
 from app.core import DataSimulatorError, settings
 from app.core.config import get_cors_origins
 from app.core.rate_limiter import limiter
@@ -56,8 +56,10 @@ app.include_router(public.router, prefix="/api/public", tags=["Public"])
 # Protected routes (require auth)
 app.include_router(projects.router, prefix="/api/projects", tags=["Projects"], dependencies=[Depends(require_auth)])
 app.include_router(pipelines.router, prefix="/api/pipelines", tags=["Pipelines"], dependencies=[Depends(require_auth)])
+app.include_router(sources.router, prefix="/api/sources", tags=["Sources"], dependencies=[Depends(require_auth)])
 app.include_router(transforms.router, prefix="/api/transforms", tags=["Transforms"], dependencies=[Depends(require_auth)])
 app.include_router(modeling.router, prefix="/api/modeling", tags=["Modeling"], dependencies=[Depends(require_auth)])
+app.include_router(ux_metrics.router, prefix="/api/ux", tags=["UX Metrics"], dependencies=[Depends(require_auth)])
 
 
 @app.get("/health")

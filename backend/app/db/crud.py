@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import DAGVersion, Project
+from app.db.models import DAGVersion, Project, UploadedSource, UXEvent
 from app.models.dag import DAGDefinition
 
 logger = logging.getLogger(__name__)
@@ -285,3 +285,105 @@ def _build_dag_diff(previous_dag: dict[str, Any], current_dag: dict[str, Any]) -
         return None
 
     return patch_ops
+
+
+# =============================================================================
+# Uploaded Source CRUD
+# =============================================================================
+
+
+def create_uploaded_source(
+    db: Session,
+    *,
+    id: str | None = None,
+    project_id: str,
+    filename: str,
+    file_format: str,
+    size_bytes: int,
+    storage_uri: str,
+    schema_json: list[dict[str, Any]],
+    upload_fingerprint: str,
+    created_by: str,
+) -> UploadedSource:
+    kwargs: dict[str, Any] = dict(
+        project_id=project_id,
+        filename=filename,
+        format=file_format,
+        size_bytes=size_bytes,
+        storage_uri=storage_uri,
+        schema_json=schema_json,
+        upload_fingerprint=upload_fingerprint,
+        created_by=created_by,
+    )
+    if id is not None:
+        kwargs["id"] = id
+    source = UploadedSource(**kwargs)
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+    return source
+
+
+def get_uploaded_source(db: Session, source_id: str) -> UploadedSource | None:
+    return db.get(UploadedSource, source_id)
+
+
+def list_uploaded_sources(
+    db: Session,
+    *,
+    project_id: str,
+    created_by: str | None = None,
+) -> list[UploadedSource]:
+    stmt = select(UploadedSource).where(UploadedSource.project_id == project_id)
+    if created_by:
+        stmt = stmt.where(UploadedSource.created_by == created_by)
+    stmt = stmt.order_by(UploadedSource.created_at.desc())
+    return list(db.execute(stmt).scalars().all())
+
+
+def delete_uploaded_source(db: Session, source: UploadedSource) -> None:
+    db.delete(source)
+    db.commit()
+
+
+# =============================================================================
+# UX Event CRUD
+# =============================================================================
+
+
+def create_ux_events(
+    db: Session,
+    *,
+    user_id: str,
+    events: list[dict[str, Any]],
+) -> int:
+    rows: list[UXEvent] = []
+    for event in events:
+        rows.append(
+            UXEvent(
+                user_id=user_id,
+                event_type=str(event.get("event_type", "unknown")),
+                path_id=event.get("path_id"),
+                stage=event.get("stage"),
+                action=event.get("action"),
+                latency_ms=event.get("latency_ms"),
+                event_metadata=event.get("metadata") or {},
+            )
+        )
+    db.add_all(rows)
+    db.commit()
+    return len(rows)
+
+
+def list_ux_events(
+    db: Session,
+    *,
+    user_id: str,
+    since_dt: Any,
+) -> list[UXEvent]:
+    stmt = (
+        select(UXEvent)
+        .where(UXEvent.user_id == user_id, UXEvent.created_at >= since_dt)
+        .order_by(UXEvent.created_at.asc())
+    )
+    return list(db.execute(stmt).scalars().all())
