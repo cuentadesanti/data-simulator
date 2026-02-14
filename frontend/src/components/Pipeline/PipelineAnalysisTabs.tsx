@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Table2,
     BarChart3,
@@ -66,6 +66,13 @@ export const PipelineAnalysisTabs = ({
     const [activeTab, setActiveTab] = useState<AnalysisTabId>(
         numericColumns.length > 0 ? 'histograms' : 'table'
     );
+
+    useEffect(() => {
+        if (diagnostics) {
+            setActiveTab('diagnostics');
+        }
+    }, [diagnostics]);
+
     const lineageEntryByStep = useMemo(
         () => new Map(lineage.map((entry) => [entry.step_id, entry])),
         [lineage]
