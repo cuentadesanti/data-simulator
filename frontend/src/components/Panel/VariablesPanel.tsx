@@ -262,7 +262,7 @@ const VariableRow: React.FC<{
   const [localName, setLocalName] = useState(varKey);
   const [nameError, setNameError] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setLocalName(varKey); }, [varKey]);
 

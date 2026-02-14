@@ -294,7 +294,12 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
       const sorted = scored.sort((a, b) => {
         if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
         if (a.type !== b.type) {
-          const typeOrder = { node: 0, constant: 1, function: 2 };
+          const typeOrder: Record<FormulaSuggestion['type'], number> = {
+            node: 0,
+            context: 1,
+            constant: 2,
+            function: 3,
+          };
           return typeOrder[a.type] - typeOrder[b.type];
         }
         return a.id.localeCompare(b.id);
