@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useDAGStore } from '../../stores/dagStore';
 import { getEffectiveVarName } from '../../types/dag';
 import { toCanonical, toDisplay } from '../../utils/formula';
+import { InputChips } from './InputChips';
 
 interface FormulaEditorProps {
   nodeId: string;
@@ -59,6 +60,7 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
   // Local state for display
   const [displayFormula, setDisplayFormula] = useState('');
   const [showHelp, setShowHelp] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -542,59 +544,62 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
 
   const currentWord = getCurrentWord(displayFormula, cursorPosition);
 
+  // Build a contextual placeholder using actual parent var names
+  const placeholder = useMemo(() => {
+    if (availableVariables.length >= 2) {
+      const [a, b] = availableVariables;
+      return `e.g., ${a.varName} * 2 + ${b.varName}`;
+    }
+    if (availableVariables.length === 1) {
+      return `e.g., ${availableVariables[0].varName} * 2 + 1`;
+    }
+    return 'e.g., x * 2 + sqrt(y)';
+  }, [availableVariables]);
+
   return (
-    <div className="space-y-4">
-      <div className="border-b border-gray-200 pb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
-            Formula Editor
-          </h3>
-          {/* Live validation status */}
+    <div className="space-y-3">
+      {/* Label row: "Formula" + validation indicator + info hover + help toggle */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <label htmlFor="formula" className="text-xs font-medium text-gray-500">
+            Formula
+          </label>
           {displayFormula.trim() && (
             <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${isValid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                }`}
+              className={`text-xs px-1.5 py-0.5 rounded ${
+                isValid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+              }`}
             >
-              {isValid ? (
-                <>
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  Valid
-                </>
-              ) : (
-                <>
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  Invalid
-                </>
-              )}
+              {isValid ? '✓' : '!'}
             </span>
           )}
+          <button
+            type="button"
+            onClick={() => setShowInfo(!showInfo)}
+            className="text-xs text-gray-400 hover:text-blue-600 leading-none"
+          >
+            ?
+          </button>
         </div>
         <button
           type="button"
           onClick={() => setShowHelp(!showHelp)}
-          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          className="text-xs text-gray-400 hover:text-blue-600"
         >
-          {showHelp ? 'Hide Help' : 'Show Help'}
+          {showHelp ? 'hide help' : 'help'}
         </button>
       </div>
 
-      {/* Formula Input */}
+      {/* Info panel */}
+      {showInfo && (
+        <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-2.5 py-2 space-y-1">
+          <p>Write a math expression using connected parent node variables, operators (<code className="text-blue-600">+ - * / **</code>), and functions (<code className="text-blue-600">sqrt, abs, log, clamp, if_else</code>).</p>
+          <p>Start typing to see autocomplete suggestions. Click a chip below the input to insert a variable name.</p>
+        </div>
+      )}
+
+      {/* Textarea */}
       <div className="relative">
-        <label htmlFor="formula" className="block text-sm font-medium text-gray-700 mb-1">
-          Formula Expression
-        </label>
         <textarea
           ref={textareaRef}
           id="formula"
@@ -605,69 +610,52 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
           onClick={handleSelect}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          rows={4}
-          placeholder="e.g., parent_node * 2 + sqrt(other_node)"
-          className={`w-full px-3 py-2 border rounded-md shadow-sm focus:ring-2 text-sm font-mono ${validationErrors.length > 0
-            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
-            : isValid
-              ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
-              : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-            }`}
+          rows={2}
+          placeholder={placeholder}
+          className={`w-full px-2 py-1.5 border rounded-md text-sm font-mono focus:ring-1 ${
+            validationErrors.length > 0
+              ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+              : isValid
+                ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
+                : 'border-gray-200 focus:ring-blue-500 focus:border-blue-500'
+          }`}
         />
 
-        {/* Validation Status Messages */}
-        {validationErrors.length > 0 ? (
-          <div className="mt-2 space-y-1">
+        {/* Validation errors — compact, only shown when there are errors */}
+        {validationErrors.length > 0 && (
+          <div className="mt-1 space-y-0.5">
             {validationErrors.map((error, index) => (
-              <div
-                key={index}
-                className={`flex items-start gap-2 text-xs px-2 py-1.5 rounded ${error.type === 'syntax'
-                  ? 'bg-red-50 text-red-700 border border-red-200'
-                  : error.type === 'reference'
-                    ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
-                    : 'bg-blue-50 text-blue-700 border border-blue-200'
-                  }`}
-              >
-                <span className="flex-shrink-0">
-                  {error.type === 'syntax' ? '⚠️' : error.type === 'reference' ? '🔗' : 'ℹ️'}
-                </span>
-                <span>{error.message}</span>
+              <div key={index} className="text-xs text-red-600">
+                {error.message}
               </div>
             ))}
           </div>
-        ) : isValid ? (
-          <div className="mt-2 flex items-center gap-2 text-xs px-2 py-1.5 rounded bg-green-50 text-green-700 border border-green-200">
-            <span>✓</span>
-            <span>Formula syntax is valid</span>
-          </div>
-        ) : null}
+        )}
 
         {/* Autocomplete Suggestions */}
         {showSuggestions && suggestions.length > 0 && (
           <div
             ref={suggestionsRef}
-            className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-64 overflow-y-auto"
+            className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto"
           >
-            <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
-              {suggestions.length} suggestion{suggestions.length !== 1 ? 's' : ''} • ↑↓ navigate •
-              Tab/Enter select
-            </div>
             {suggestions.map((suggestion, index) => (
               <button
                 key={suggestion.id + suggestion.type}
                 type="button"
                 onClick={() => insertSuggestion(suggestion)}
-                className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-blue-50 ${index === selectedIndex ? 'bg-blue-100' : ''
-                  }`}
+                className={`w-full text-left px-2.5 py-1.5 flex items-center justify-between hover:bg-blue-50 ${
+                  index === selectedIndex ? 'bg-blue-100' : ''
+                }`}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <span
-                    className={`text-xs px-1.5 py-0.5 rounded font-medium ${suggestion.type === 'node'
-                      ? 'bg-blue-100 text-blue-700'
-                      : suggestion.type === 'constant'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-purple-100 text-purple-700'
-                      }`}
+                    className={`text-xs px-1 py-0.5 rounded ${
+                      suggestion.type === 'node'
+                        ? 'bg-blue-100 text-blue-700'
+                        : suggestion.type === 'constant'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-purple-100 text-purple-700'
+                    }`}
                   >
                     {suggestion.type === 'node'
                       ? 'var'
@@ -679,135 +667,46 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
                     {highlightMatch(suggestion.id, currentWord)}
                   </span>
                 </div>
-                <span className="text-xs text-gray-500 truncate ml-2 max-w-[150px]">
+                <span className="text-xs text-gray-500 truncate ml-2 max-w-[120px]">
                   {suggestion.description}
                 </span>
               </button>
             ))}
           </div>
         )}
-
-        <p className="mt-1 text-xs text-gray-500">
-          Type to see autocomplete suggestions. Use ↑↓ to navigate, Tab/Enter to select, Esc to
-          close.
-        </p>
       </div>
 
-      {/* Available Variables Quick Reference */}
-      {availableVariables.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-medium text-gray-700">Quick Insert</h4>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {availableVariables.map((node) => (
-              <button
-                key={node.id}
-                type="button"
-                onClick={() => insertText(node.varName)}
-                className="px-2 py-1 text-xs font-mono bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 transition-colors"
-                title={`${node.name} (${node.dtype || 'unknown'})`}
-              >
-                {node.varName}
-              </button>
-            ))}
-            {contextKeys.map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => insertText(key)}
-                className="px-2 py-1 text-xs font-mono bg-purple-50 text-purple-700 border border-purple-200 rounded hover:bg-purple-100 transition-colors"
-                title="Context variable"
-              >
-                {key}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Input Chips */}
+      <InputChips nodeId={nodeId} onInsert={insertText} />
 
-      {/* No Variables Warning */}
-      {availableVariables.length === 0 && contextKeys.length === 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 text-sm text-yellow-800">
-          <p className="font-medium">No variables available</p>
-          <p className="mt-1 text-xs">
-            Draw edges from other nodes to this node to use them in your formula.
-          </p>
-        </div>
-      )}
-
-      {/* Help Panel */}
+      {/* Help Panel — compact, collapsible */}
       {showHelp && (
-        <div className="space-y-3 pt-2 border-t border-gray-200">
-          {/* Available Functions */}
+        <div className="space-y-2 pt-2 border-t border-gray-100">
           <div>
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Available Functions</h4>
-            <div className="bg-gray-50 border border-gray-200 rounded-md p-2 max-h-48 overflow-y-auto">
-              <div className="grid grid-cols-2 gap-1">
-                {AVAILABLE_FUNCTIONS.map((func) => (
-                  <button
-                    key={func.name}
-                    type="button"
-                    onClick={() => insertText(func.example)}
-                    className="text-left px-2 py-1 bg-white border border-gray-200 rounded hover:bg-blue-50 hover:border-blue-300 transition-colors"
-                  >
-                    <div className="text-xs font-mono text-gray-900">{func.name}()</div>
-                    <div className="text-xs text-gray-500 truncate">{func.description}</div>
-                  </button>
-                ))}
-              </div>
+            <div className="text-xs font-medium text-gray-500 mb-1">Functions</div>
+            <div className="flex flex-wrap gap-1">
+              {AVAILABLE_FUNCTIONS.map((func) => (
+                <button
+                  key={func.name}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => insertText(func.example)}
+                  className="px-1.5 py-0.5 text-xs font-mono bg-gray-50 text-gray-700 border border-gray-200 rounded hover:bg-purple-50 hover:text-purple-700 transition-colors"
+                  title={func.description}
+                >
+                  {func.name}
+                </button>
+              ))}
             </div>
           </div>
-
-          {/* Operators */}
           <div>
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Operators</h4>
-            <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <span className="font-mono text-blue-600">+</span> Add
-                </div>
-                <div>
-                  <span className="font-mono text-blue-600">-</span> Subtract
-                </div>
-                <div>
-                  <span className="font-mono text-blue-600">*</span> Multiply
-                </div>
-                <div>
-                  <span className="font-mono text-blue-600">/</span> Divide
-                </div>
-                <div>
-                  <span className="font-mono text-blue-600">**</span> Power
-                </div>
-                <div>
-                  <span className="font-mono text-blue-600">%</span> Modulo
-                </div>
-                <div>
-                  <span className="font-mono text-blue-600">&gt;</span> Greater
-                </div>
-                <div>
-                  <span className="font-mono text-blue-600">&lt;</span> Less
-                </div>
-                <div>
-                  <span className="font-mono text-blue-600">==</span> Equal
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Examples */}
-          <div>
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Examples</h4>
-            <div className="bg-gray-50 border border-gray-200 rounded-md p-2 space-y-1 text-xs">
-              <code className="block bg-white px-2 py-1 rounded border border-gray-200 text-blue-600">
-                x * 2 + y
-              </code>
-              <code className="block bg-white px-2 py-1 rounded border border-gray-200 text-blue-600">
-                sqrt(abs(x)) + max(y, 0)
-              </code>
-              <code className="block bg-white px-2 py-1 rounded border border-gray-200 text-blue-600">
-                if_else(x &gt; 0, x, 0)
-              </code>
+            <div className="text-xs font-medium text-gray-500 mb-1">Operators</div>
+            <div className="flex flex-wrap gap-1.5 text-xs font-mono text-gray-600">
+              {['+', '-', '*', '/', '**', '%', '>', '<', '=='].map((op) => (
+                <span key={op} className="px-1 py-0.5 bg-gray-50 rounded border border-gray-200">
+                  {op}
+                </span>
+              ))}
             </div>
           </div>
         </div>

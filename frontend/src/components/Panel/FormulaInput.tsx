@@ -8,6 +8,8 @@ interface FormulaInputProps {
   nodeId: string;
   placeholder?: string;
   compact?: boolean;
+  onBlurCapture?: () => void;
+  onFocusCapture?: () => void;
 }
 
 interface ValidationError {
@@ -31,6 +33,8 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
   nodeId,
   placeholder = 'e.g., parent_node * 2',
   compact = false,
+  onBlurCapture,
+  onFocusCapture,
 }) => {
   const nodes = useDAGStore((state) => state.nodes);
   const edges = useDAGStore((state) => state.edges);
@@ -245,20 +249,35 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
             updateSuggestions(e.target.value, e.target.selectionStart || 0);
           }}
           onKeyDown={handleKeyDown}
-          onFocus={() => updateSuggestions(value, inputRef.current?.selectionStart || 0)}
-          onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+          onFocus={() => {
+            onFocusCapture?.();
+            updateSuggestions(value, inputRef.current?.selectionStart || 0);
+          }}
+          onBlur={() => {
+            setTimeout(() => setShowSuggestions(false), 150);
+            onBlurCapture?.();
+          }}
           placeholder={placeholder}
-          className={`flex-1 px-3 py-2 border rounded-md shadow-sm focus:ring-2 text-sm font-mono ${
-            hasValue
-              ? isValid
-                ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
-                : 'border-red-300 focus:ring-red-500 focus:border-red-500'
-              : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-          }`}
+          className={compact
+            ? `flex-1 px-2 py-1.5 border rounded-md text-sm font-mono focus:ring-1 ${
+                hasValue
+                  ? isValid
+                    ? 'border-gray-200 focus:ring-blue-500 focus:border-blue-500'
+                    : 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                  : 'border-gray-200 focus:ring-blue-500 focus:border-blue-500'
+              }`
+            : `flex-1 px-3 py-2 border rounded-md shadow-sm focus:ring-2 text-sm font-mono ${
+                hasValue
+                  ? isValid
+                    ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
+                    : 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                  : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+              }`
+          }
         />
         {hasValue && (
           <span
-            className={`text-xs px-1.5 py-0.5 rounded ${
+            className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
               isValid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
             }`}
           >
@@ -268,7 +287,7 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
       </div>
 
       {/* Validation errors */}
-      {!compact && validationErrors.length > 0 && (
+      {validationErrors.length > 0 && (
         <div className="mt-1 text-xs text-red-600">
           {validationErrors.map((err, i) => (
             <div key={i}>{err.message}</div>

@@ -1,119 +1,60 @@
 # Node Editor Panel Components
 
-This directory contains the node editor panel components for the Data Simulator frontend.
+Compact inspector panel for editing DAG node configuration.
 
 ## Components
 
 ### NodeEditor.tsx
-Main panel container that orchestrates all sub-components.
+Main panel container. Compact layout:
 
-- Shows "Select a node" message when nothing is selected
-- Displays the currently selected node's ID in the header
-- Contains a close button to deselect the node
-- Renders all editing forms based on node configuration
-- Fixed width panel (max-w-md) with scrollable content area
+- **Header**: Node name `<input>` (editable, acts as title) + close button
+- **Var preview**: One-line `var: snake_case_name` derived from node name
+- **Meta row**: Kind toggle (`[Stoch | Det]`) + dtype `<select>` + scope `<select>` — all in one horizontal row
+- **Group-by**: Conditional row, only when `scope === 'group'`
+- **Kind-specific section**: Delegates to `DistributionForm` or `FormulaEditor`
+- **Post-processing**: Collapsible `PostProcessing` at the bottom
 
-### BasicInfo.tsx
-Basic node information editor.
-
-**Fields:**
-- Node name (text input)
-- Kind selector (stochastic/deterministic radio buttons)
-- Data type selector (float/int/category/bool/string dropdown)
-- Scope selector (global/group/row dropdown)
-- Group by field (conditional dropdown, only visible when scope=group)
-
-**Features:**
-- Automatically clears `group_by` when scope changes from 'group'
-- Resets distribution/formula when switching between stochastic/deterministic
-- Filters group_by options to only show categorical nodes
-- Shows warning if no categorical nodes exist when scope=group
+Kind toggle clears distribution/formula on switch (clean swap, no state preservation).
 
 ### DistributionForm.tsx
 Distribution configuration for stochastic nodes.
 
-**Distribution Types:**
-- Normal (Gaussian): mu, sigma
-- Uniform: low, high
-- Categorical: categories (comma-separated), probs (comma-separated)
-- Bernoulli: p (probability)
+- Distribution dropdown with search (fetches from `/distributions` API)
+- One text input per distribution parameter (label left, monospace input right)
+- Values parsed on blur/Enter: if the full string is a finite number, stored as `number`; otherwise stored as `string` (expression)
+- Categorical distributions use plain text inputs for `categories` and `probs` (comma-separated)
+- `InputChips` below param fields for quick variable insertion
+- Changing distribution type resets params to defaults (clean swap)
 
-**Features:**
-- Dynamic parameter inputs based on distribution type
-- Three input modes per parameter:
-  - Literal: Direct numeric value
-  - Formula: String expression referencing other nodes
-  - Lookup: Reference to context lookup table
-- Input type toggle buttons for each parameter
-- Helpful tip about parameter input modes
+### InputChips.tsx
+Shared clickable chip row for inserting variable names into formula inputs.
+
+- Parent node var names (blue), context keys (purple), built-in constants PI/E (gray)
+- `onMouseDown={e => e.preventDefault()}` prevents stealing focus from the active input
+- `onInsert(text)` callback — parent component handles actual insertion
+- Does not render if no chips are available
 
 ### FormulaEditor.tsx
 Formula editor for deterministic nodes.
 
-**Features:**
-- Large textarea for formula expression
-- List of available variables (other node IDs) with click-to-insert
-- Collapsible help panel showing:
-  - Available functions (abs, min, max, sqrt, pow, exp, log, etc.)
-  - Syntax examples
-  - Operators reference
-- Click-to-insert functionality for both variables and functions
-- Each variable shows node details (kind, dtype, scope)
-
-**Supported Functions:**
-abs, min, max, sqrt, pow, exp, log, sin, cos, tan, round, floor, ceil
-
-**Operators:**
-+, -, *, /, **, %, >, <, ==, !=, and, or, not
+- Textarea with autocomplete suggestions (nodes, functions, constants)
+- Live validation (syntax + reference checks)
+- `InputChips` for quick variable insertion (replaces old Quick Insert section)
+- Collapsible help panel (functions, operators, examples)
 
 ### PostProcessing.tsx
-Optional post-processing transformations.
+Collapsible post-processing options.
 
-**Options:**
-- round_decimals: Round to N decimal places (0-10)
-- clip_min: Minimum value threshold
-- clip_max: Maximum value threshold
-- missing_rate: Rate of missing values (0-1)
-
-**Features:**
-- Checkbox to enable/disable each option
-- Default values when enabling options
-- Active summary panel showing all enabled post-processing steps
-- Helpful descriptions for each option
-
-## Usage
-
-```tsx
-import { NodeEditor } from './components/Panel';
-
-function App() {
-  return (
-    <div className="flex">
-      <div className="flex-1">
-        {/* Main canvas area */}
-      </div>
-      <NodeEditor />
-    </div>
-  );
-}
-```
+- Collapsed by default (auto-expands when any option is active)
+- **Collapsed view**: Chevron + "Post-Processing" + inline summary (e.g., `Round 2 · Min 0 · Max 100 · 5% missing`)
+- **Expanded view**: Checkboxes for round/clip_min/clip_max/missing_rate with compact number inputs
+- `aria-expanded` for accessibility
 
 ## Store Integration
 
 All components use the Zustand store from `stores/dagStore.ts`:
 
-- `selectedNodeId` - Currently selected node ID
-- `getSelectedNode()` - Get the selected node config
-- `updateNode(nodeId, partialConfig)` - Update node configuration
-- `selectNode(null)` - Deselect the current node
-- `nodes` - All flow nodes (used for references)
-
-## Styling
-
-All components use TailwindCSS for styling with a consistent design system:
-
-- Color scheme: Blue for primary actions, gray for neutral elements
-- Border radius: rounded-md (6px)
-- Shadows: shadow-sm for subtle elevation
-- Spacing: Consistent use of Tailwind spacing scale
-- Focus states: Blue ring on interactive elements
+- `selectedNodeId` — Currently selected node ID
+- `updateNode(nodeId, partialConfig)` — Update node configuration
+- `selectNode(null)` — Deselect the current node
+- `nodes` / `edges` / `context` — DAG data for parent/context resolution
