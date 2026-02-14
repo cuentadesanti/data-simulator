@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useDAGStore } from '../../stores/dagStore';
 import { getEffectiveVarName } from '../../types/dag';
 import { toCanonical, toDisplay } from '../../utils/formula';
+import { buildSuggestions, FORMULA_RESERVED_NAMES, type FormulaSuggestion } from '../../utils/buildSuggestions';
 import { InputChips } from './InputChips';
 
 interface FormulaEditorProps {
@@ -36,20 +37,12 @@ const AVAILABLE_FUNCTIONS = [
   },
 ];
 
-interface Suggestion {
-  type: 'node' | 'function' | 'constant';
-  id: string;
-  name: string;
-  description: string;
-  insertText: string;
-  matchScore: number; // Higher = better match
-}
-
 export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
   const updateNode = useDAGStore((state) => state.updateNode);
   const nodes = useDAGStore((state) => state.nodes);
   const edges = useDAGStore((state) => state.edges);
   const context = useDAGStore((state) => state.context);
+  const contextMeta = useDAGStore((state) => state.contextMeta);
 
   // Read formula directly from store (Canonical Form)
   const canonicalFormula = useDAGStore((state) => {
@@ -62,7 +55,7 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
   const [showHelp, setShowHelp] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<FormulaSuggestion[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
@@ -131,36 +124,8 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
     [availableVariables, contextKeys]
   );
 
-  // Reserved functions for validation
-  const reservedFunctions = useMemo(
-    () =>
-      new Set([
-        'abs',
-        'min',
-        'max',
-        'round',
-        'floor',
-        'ceil',
-        'sqrt',
-        'log',
-        'log10',
-        'exp',
-        'pow',
-        'sin',
-        'cos',
-        'tan',
-        'clamp',
-        'if_else',
-        'and',
-        'or',
-        'not',
-        'if',
-        'else',
-        'in',
-        'is',
-      ]),
-    []
-  );
+  // Reserved functions for validation (centralized)
+  const reservedFunctions = FORMULA_RESERVED_NAMES;
 
   // Validate formula syntax (operates on DISPLAY formula)
   const validateFormula = useCallback(
@@ -260,71 +225,21 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
     setIsValid(errors.length === 0 && displayFormula.trim().length > 0);
   }, [displayFormula, validateFormula]);
 
-  // Build all suggestions
+  // Build all suggestions using shared utility
+  const parentVarsForSuggestions = useMemo(
+    () => availableVariables.map((v) => ({
+      varName: v.varName,
+      name: v.name,
+      kind: v.kind,
+      dtype: v.dtype || undefined,
+      scope: v.scope,
+    })),
+    [availableVariables]
+  );
+
   const allSuggestions = useMemo(
-    () => [
-      // Parent nodes (from edges) - use varName for id and insertText
-      ...availableVariables.map((node) => ({
-        type: 'node' as const,
-        id: node.varName, // Use varName for matching
-        name: node.name,
-        description: `${node.kind} • ${node.dtype || 'unknown'} • ${node.scope}`,
-        insertText: node.varName, // Insert varName, not node ID
-        matchScore: 0,
-      })),
-      // Context keys
-      ...contextKeys.map((key) => ({
-        type: 'node' as const,
-        id: key,
-        name: key,
-        description: 'context value',
-        insertText: key,
-        matchScore: 0,
-      })),
-      // Built-in constants
-      {
-        type: 'constant' as const,
-        id: 'PI',
-        name: 'PI',
-        description: '3.14159...',
-        insertText: 'PI',
-        matchScore: 0,
-      },
-      {
-        type: 'constant' as const,
-        id: 'E',
-        name: 'E',
-        description: '2.71828...',
-        insertText: 'E',
-        matchScore: 0,
-      },
-      {
-        type: 'constant' as const,
-        id: 'TRUE',
-        name: 'TRUE',
-        description: 'Boolean true',
-        insertText: 'TRUE',
-        matchScore: 0,
-      },
-      {
-        type: 'constant' as const,
-        id: 'FALSE',
-        name: 'FALSE',
-        description: 'Boolean false',
-        insertText: 'FALSE',
-        matchScore: 0,
-      },
-      // Functions
-      ...AVAILABLE_FUNCTIONS.map((func) => ({
-        type: 'function' as const,
-        id: func.name,
-        name: func.name,
-        description: func.description,
-        insertText: func.name + '(',
-        matchScore: 0,
-      })),
-    ],
-    [availableVariables, contextKeys]
+    () => buildSuggestions(parentVarsForSuggestions, context, contextMeta),
+    [parentVarsForSuggestions, context, contextMeta]
   );
 
   // Get the current word being typed at cursor position
@@ -398,7 +313,7 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
 
   // Insert suggestion at cursor position
   const insertSuggestion = useCallback(
-    (suggestion: Suggestion) => {
+    (suggestion: FormulaSuggestion) => {
       const textarea = textareaRef.current;
       if (!textarea) return;
 
@@ -652,16 +567,20 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
                     className={`text-xs px-1 py-0.5 rounded ${
                       suggestion.type === 'node'
                         ? 'bg-blue-100 text-blue-700'
-                        : suggestion.type === 'constant'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-purple-100 text-purple-700'
+                        : suggestion.type === 'context'
+                          ? 'bg-purple-100 text-purple-700'
+                          : suggestion.type === 'constant'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-purple-100 text-purple-700'
                     }`}
                   >
                     {suggestion.type === 'node'
                       ? 'var'
-                      : suggestion.type === 'constant'
-                        ? 'const'
-                        : 'fn'}
+                      : suggestion.type === 'context'
+                        ? 'ctx'
+                        : suggestion.type === 'constant'
+                          ? 'const'
+                          : 'fn'}
                   </span>
                   <span className="font-mono text-sm text-gray-900">
                     {highlightMatch(suggestion.id, currentWord)}

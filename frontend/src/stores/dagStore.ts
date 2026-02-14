@@ -10,6 +10,8 @@ import type {
   MissingEdge,
   ValidationError,
   Viewport,
+  ContextVariableMeta,
+  ContextVariableType,
 } from '../types/dag';
 import { trackClick } from '../services/telemetry';
 
@@ -27,6 +29,7 @@ interface DAGState {
 
   // Context (lookup tables, constants)
   context: Record<string, unknown>;
+  contextMeta: Record<string, ContextVariableMeta>;
 
   // Generation metadata
   metadata: GenerationMetadata;
@@ -72,6 +75,8 @@ interface DAGActions {
   setContext: (context: Record<string, unknown>) => void;
   updateContextEntry: (key: string, value: unknown) => void;
   deleteContextEntry: (key: string) => void;
+  setContextVariable: (key: string, value: unknown, type: ContextVariableType) => void;
+  renameContextVariable: (oldKey: string, newKey: string) => void;
 
   // Metadata operations
   setMetadata: (metadata: Partial<GenerationMetadata>) => void;
@@ -106,12 +111,22 @@ interface DAGActions {
 
 const generateId = () => `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+/** Infer context variable type from its runtime value (fallback for legacy DAGs). */
+function inferContextType(value: unknown): ContextVariableType {
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'number') return 'number';
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'object' && value !== null) return 'dict';
+  return 'unsupported';
+}
+
 const initialState: DAGState = {
   nodes: [],
   edges: [],
   viewport: null,
   selectedNodeId: null,
   context: {},
+  contextMeta: {},
   metadata: {
     sample_size: 1000,
     seed: undefined,
@@ -264,6 +279,26 @@ export const useDAGStore = create<DAGState & DAGActions>()(
     deleteContextEntry: (key) => {
       set((state) => {
         delete state.context[key];
+        delete state.contextMeta[key];
+      });
+    },
+
+    setContextVariable: (key, value, type) => {
+      set((state) => {
+        state.context[key] = value;
+        state.contextMeta[key] = { type };
+      });
+    },
+
+    renameContextVariable: (oldKey, newKey) => {
+      set((state) => {
+        if (oldKey === newKey) return;
+        state.context[newKey] = state.context[oldKey];
+        delete state.context[oldKey];
+        if (state.contextMeta[oldKey]) {
+          state.contextMeta[newKey] = state.contextMeta[oldKey];
+          delete state.contextMeta[oldKey];
+        }
       });
     },
 
@@ -340,6 +375,7 @@ export const useDAGStore = create<DAGState & DAGActions>()(
           target: e.target,
         })),
         context: state.context,
+        context_meta: state.contextMeta,
         metadata: state.metadata,
         layout: {
           positions: Object.fromEntries(
@@ -375,6 +411,18 @@ export const useDAGStore = create<DAGState & DAGActions>()(
         }));
 
         state.context = dag.context || {};
+
+        // Load context_meta if present, otherwise infer from values
+        if (dag.context_meta && Object.keys(dag.context_meta).length > 0) {
+          state.contextMeta = dag.context_meta;
+        } else {
+          const inferred: Record<string, ContextVariableMeta> = {};
+          for (const [key, value] of Object.entries(state.context)) {
+            inferred[key] = { type: inferContextType(value) };
+          }
+          state.contextMeta = inferred;
+        }
+
         state.metadata = dag.metadata;
         state.selectedNodeId = null;
         state.validationErrors = [];
@@ -483,6 +531,7 @@ export const selectShouldRestoreViewport = (state: DAGState & DAGActions) =>
   state.shouldRestoreViewport;
 export const selectSelectedNodeId = (state: DAGState & DAGActions) => state.selectedNodeId;
 export const selectContext = (state: DAGState & DAGActions) => state.context;
+export const selectContextMeta = (state: DAGState & DAGActions) => state.contextMeta;
 export const selectMetadata = (state: DAGState & DAGActions) => state.metadata;
 export const selectValidationErrors = (state: DAGState & DAGActions) => state.validationErrors;
 export const selectStructuredErrors = (state: DAGState & DAGActions) => state.structuredErrors;

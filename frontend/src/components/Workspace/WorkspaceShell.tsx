@@ -34,15 +34,26 @@ export const WorkspaceShell = () => {
     })();
   }, [fetchProjects, restoreCurrentProject]);
 
+  const setInspectorView = useWorkspaceStore((state) => state.setInspectorView);
+  const inspectorViewPinned = useWorkspaceStore((state) => state.inspectorViewPinned);
+
   useEffect(() => {
     if (selectedNodeId) {
       setInspectorOpen(true);
       setInspectorContext({ type: 'node', id: selectedNodeId });
+      // Only auto-switch to node view if user hasn't pinned variables
+      if (!inspectorViewPinned) {
+        setInspectorView('node');
+      }
+    } else if (inspectorViewPinned) {
+      // Variables pinned — keep inspector open even without a selected node
+      setInspectorOpen(true);
+      setInspectorContext(null);
     } else {
       setInspectorOpen(false);
       setInspectorContext(null);
     }
-  }, [selectedNodeId, setInspectorContext, setInspectorOpen]);
+  }, [selectedNodeId, activeStage, inspectorViewPinned, setInspectorContext, setInspectorOpen, setInspectorView]);
 
   return (
     <div className="h-screen w-full bg-gray-50">

@@ -21,7 +21,7 @@ import type { DAGDefinition } from '../../types/dag';
 // Counts: stage-bar primary buttons + GlobalHeader buttons (Save + Share = 2).
 const HEADER_ACTIONS = 2;
 const STAGE_BAR_COUNTS: Record<string, number> = {
-  source: 3,    // AddNode, Generate Preview, Change Source
+  source: 4,    // AddNode, Generate Preview, Change Source, Variables
   transform: 3, // Generate Preview, Add Step, Materialize
   model: 1,     // Fit Model
   publish: 2,   // Download CSV, Share
@@ -29,6 +29,9 @@ const STAGE_BAR_COUNTS: Record<string, number> = {
 
 export const StageActionBar = () => {
   const stage = useWorkspaceStore((state) => state.activeStage);
+  const inspectorView = useWorkspaceStore((state) => state.inspectorView);
+  const pinInspectorView = useWorkspaceStore((state) => state.pinInspectorView);
+  const setInspectorOpen = useWorkspaceStore((state) => state.setInspectorOpen);
   const exportDAG = useDAGStore((state) => state.exportDAG);
   const importDAG = useDAGStore((state) => state.importDAG);
   const clearDAG = useDAGStore((state) => state.clearDAG);
@@ -173,6 +176,23 @@ export const StageActionBar = () => {
             className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Change Source
+          </button>
+        )}
+        {stage === 'source' && (
+          <button
+            type="button"
+            onClick={() => {
+              const next = inspectorView === 'variables' ? 'node' : 'variables';
+              pinInspectorView(next);
+              setInspectorOpen(true);
+            }}
+            className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+              inspectorView === 'variables'
+                ? 'border-purple-300 bg-purple-50 text-purple-700'
+                : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            Variables
           </button>
         )}
         {stage === 'transform' && (

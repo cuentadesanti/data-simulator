@@ -123,7 +123,10 @@ const ParamField: React.FC<{
         <label className="text-xs font-mono text-gray-500 w-14 text-right flex-shrink-0">
           {paramName}
         </label>
-        <div className="flex-1 px-2 py-1.5 border border-gray-200 rounded-md text-sm font-mono bg-gray-50 text-gray-500 truncate">
+        <div
+          className="flex-1 px-2 py-1.5 border border-gray-200 rounded-md text-sm font-mono bg-gray-50 text-gray-500 truncate cursor-help"
+          title="Create a dict variable in the Variables panel and reference it as table_name[key] in a formula input"
+        >
           {label}
         </div>
       </div>

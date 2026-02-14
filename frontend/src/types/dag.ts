@@ -97,12 +97,20 @@ export interface GenerationMetadata {
   preview_rows?: number;
 }
 
+// Context variable metadata (for Variables panel)
+export type ContextVariableType = 'number' | 'boolean' | 'dict' | 'array' | 'unsupported';
+
+export interface ContextVariableMeta {
+  type: ContextVariableType;
+}
+
 // Full DAG definition
 export interface DAGDefinition {
   schema_version?: string;
   nodes: NodeConfig[];
   edges: DAGEdge[];
   context: Record<string, unknown>;
+  context_meta?: Record<string, ContextVariableMeta>;
   metadata: GenerationMetadata;
   layout?: Layout;
   was_migrated?: boolean;
