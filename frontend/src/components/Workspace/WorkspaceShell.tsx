@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useDAGStore, selectSelectedNodeId } from '../../stores/dagStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { useOnboardingStore } from '../../stores/onboardingStore';
 import { GlobalHeader } from './GlobalHeader';
 import { LeftRail } from './LeftRail';
 import { Inspector } from './Inspector';
@@ -10,6 +11,7 @@ import { SourceStage } from './stages/SourceStage';
 import { TransformStage } from './stages/TransformStage';
 import { ModelStage } from './stages/ModelStage';
 import { PublishStage } from './stages/PublishStage';
+import { TourProvider, HelpButton, useTourTrigger } from '../Onboarding';
 
 export const WorkspaceShell = () => {
   const activeStage = useWorkspaceStore((state) => state.activeStage);
@@ -19,11 +21,15 @@ export const WorkspaceShell = () => {
   const selectedNodeId = useDAGStore(selectSelectedNodeId);
   const fetchProjects = useProjectStore((state) => state.fetchProjects);
   const restoreCurrentProject = useProjectStore((state) => state.restoreCurrentProject);
+  const hydrateOnboarding = useOnboardingStore((state) => state._hydrate);
   const initRef = useRef(false);
+
+  useTourTrigger();
 
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
+    hydrateOnboarding();
     void (async () => {
       await fetchProjects();
       await restoreCurrentProject();
@@ -32,7 +38,7 @@ export const WorkspaceShell = () => {
         await state.selectProject(state.projects[0].id);
       }
     })();
-  }, [fetchProjects, restoreCurrentProject]);
+  }, [fetchProjects, restoreCurrentProject, hydrateOnboarding]);
 
   useEffect(() => {
     if (selectedNodeId) {
@@ -51,7 +57,7 @@ export const WorkspaceShell = () => {
         <LeftRail />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <StageActionBar />
-          <div className="min-h-0 flex-1 overflow-hidden">
+          <div data-tour="main-content" className="min-h-0 flex-1 overflow-hidden">
             {activeStage === 'source' && <SourceStage />}
             {activeStage === 'transform' && <TransformStage />}
             {activeStage === 'model' && <ModelStage />}
@@ -60,6 +66,8 @@ export const WorkspaceShell = () => {
         </main>
         {inspectorOpen && <div className="hidden xl:block">{<Inspector />}</div>}
       </div>
+      <TourProvider />
+      <HelpButton />
     </div>
   );
 };

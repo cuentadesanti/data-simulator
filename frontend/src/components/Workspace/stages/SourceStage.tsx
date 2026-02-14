@@ -38,7 +38,7 @@ export const SourceStage = () => {
 
   if (!sourceType) {
     return (
-      <div className="flex h-full items-center justify-center p-8">
+      <div data-tour="source-chooser" className="flex h-full items-center justify-center p-8">
         <SourceChooser onPick={handlePick} />
       </div>
     );
