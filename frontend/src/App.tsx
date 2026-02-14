@@ -11,6 +11,7 @@ import { useDAGStore, selectActiveMainTab } from './stores/dagStore';
 
 import {
   useAuth,
+  RedirectToSignIn,
 } from '@clerk/clerk-react';
 import { setTokenProvider } from './services/api';
 import { isAuthBypassed } from './utils/auth';
@@ -19,7 +20,7 @@ import '@xyflow/react/dist/style.css';
 function App() {
   const hasUnsavedChanges = useProjectStore(selectHasUnsavedChanges);
   const activeTab = useDAGStore(selectActiveMainTab);
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isSignedIn, isLoaded } = useAuth();
   const authBypassed = isAuthBypassed();
 
   // Initialize auth token provider
@@ -81,10 +82,12 @@ function App() {
               )}
             </div>
           </div>
-        ) : (
+        ) : !isLoaded ? (
           <div className="h-screen w-full flex items-center justify-center bg-gray-50 text-gray-600">
-            Redirecting to sign-in...
+            Loading...
           </div>
+        ) : (
+          <RedirectToSignIn />
         )}
       </ReactFlowProvider>
     </ToastProvider>
