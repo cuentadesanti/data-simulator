@@ -70,7 +70,7 @@ export const AddNodeDropdown: React.FC = () => {
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div data-tour="add-node-dropdown" className="relative" ref={dropdownRef}>
       {/* Dropdown Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}

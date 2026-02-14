@@ -208,7 +208,7 @@ export const RecipePanel = ({
 
     return (
         <>
-            <div className={`bg-white border border-gray-200 rounded-xl flex flex-col min-h-0 ${className}`}>
+            <div data-tour="recipe-panel" className={`bg-white border border-gray-200 rounded-xl flex flex-col min-h-0 ${className}`}>
                 <div className="px-3 py-2 border-b border-gray-200 flex items-center gap-2">
                     <Layers size={15} className="text-gray-500" />
                     <h3 className="text-sm font-semibold text-gray-700">Recipe</h3>

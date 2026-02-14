@@ -536,7 +536,7 @@ export const ModelsPanel = ({ className = '', onDiagnosticsChange }: ModelsPanel
         modelOptions.length === 0;
 
     return (
-        <div className={`h-full overflow-y-auto ${className}`}>
+        <div data-tour="models-panel" className={`h-full overflow-y-auto ${className}`}>
             <div className="space-y-4">
                 <div className="rounded-xl border border-gray-200 bg-white p-4">
                     <div className="flex items-center gap-2 mb-3">
