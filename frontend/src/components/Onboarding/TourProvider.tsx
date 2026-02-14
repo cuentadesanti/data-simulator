@@ -15,6 +15,7 @@ const STAGE_LABELS: Record<TourId, string> = {
   transform: 'Transform',
   model: 'Model',
   publish: 'Publish',
+  inspector: 'Inspector',
 };
 
 export const TourProvider = () => {
