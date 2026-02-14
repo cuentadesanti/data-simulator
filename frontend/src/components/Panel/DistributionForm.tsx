@@ -35,31 +35,62 @@ const parseParamValue = (text: string): ParamValue => {
   return isFinite(num) ? num : trimmed;
 };
 
-/** Single param input — uses FormulaInput for autocomplete, parses on blur */
+/** Single param input — uses FormulaInput for autocomplete, parses on blur.
+ *  Object-valued params (LookupValue / MappingValue) are rendered read-only
+ *  so they are never coerced to strings.
+ *  Chip insertion is routed through `pendingInsert` to stay in sync with
+ *  local editing state (avoids the store-read-while-editing race). */
 const ParamField: React.FC<{
   paramName: string;
   nodeId: string;
   distributionType: string;
   onFocus: (paramName: string) => void;
-}> = ({ paramName, nodeId, distributionType, onFocus }) => {
+  pendingInsert?: { text: string; key: number } | null;
+}> = ({ paramName, nodeId, distributionType, onFocus, pendingInsert }) => {
   const storeValue = useDAGStore((state) => {
     const node = state.nodes.find((n) => n.id === nodeId);
     return node?.data.config.distribution?.params[paramName];
   });
   const updateNode = useDAGStore((state) => state.updateNode);
 
+  // P1: detect object-valued params (LookupValue / MappingValue)
+  const isObjectParam = typeof storeValue === 'object' && storeValue !== null;
+
   // Local string state for editing — no store writes on keystroke
   const [localText, setLocalText] = useState(() =>
-    storeValue !== undefined ? String(storeValue) : ''
+    !isObjectParam && storeValue !== undefined ? String(storeValue) : ''
   );
   const isEditingRef = useRef(false);
+  const localTextRef = useRef(localText);
+  localTextRef.current = localText;
+  const lastInsertKeyRef = useRef(0);
 
-  // Sync from store when not actively editing (e.g. distribution type change, chip insert)
+  // Sync from store when not actively editing (e.g. distribution type change)
   useEffect(() => {
-    if (!isEditingRef.current) {
+    if (!isEditingRef.current && !isObjectParam) {
       setLocalText(storeValue !== undefined ? String(storeValue) : '');
     }
-  }, [storeValue]);
+  }, [storeValue, isObjectParam]);
+
+  // P2: Handle chip insertion through local state, not store-direct
+  useEffect(() => {
+    if (pendingInsert && pendingInsert.key !== lastInsertKeyRef.current) {
+      lastInsertKeyRef.current = pendingInsert.key;
+      const newText = localTextRef.current + pendingInsert.text;
+      setLocalText(newText);
+      // Commit to store immediately so preview/validate see the chip
+      const parsed = parseParamValue(newText);
+      const state = useDAGStore.getState();
+      const node = state.nodes.find((n) => n.id === nodeId);
+      const currentDist = node?.data.config.distribution || { type: distributionType, params: {} };
+      updateNode(nodeId, {
+        distribution: {
+          ...currentDist,
+          params: { ...currentDist.params, [paramName]: parsed },
+        },
+      });
+    }
+  }, [pendingInsert, nodeId, paramName, distributionType, updateNode]);
 
   const commitValue = useCallback(() => {
     isEditingRef.current = false;
@@ -78,6 +109,26 @@ const ParamField: React.FC<{
       },
     });
   }, [localText, nodeId, paramName, distributionType, updateNode]);
+
+  // P1: Object params (lookup/mapping) — render read-only, never coerce
+  if (isObjectParam) {
+    const obj = storeValue as Record<string, unknown>;
+    const label = 'lookup' in obj
+      ? `lookup(${obj.lookup})`
+      : 'mapping' in obj
+        ? 'mapping{...}'
+        : JSON.stringify(obj);
+    return (
+      <div className="flex items-center gap-2">
+        <label className="text-xs font-mono text-gray-500 w-14 text-right flex-shrink-0">
+          {paramName}
+        </label>
+        <div className="flex-1 px-2 py-1.5 border border-gray-200 rounded-md text-sm font-mono bg-gray-50 text-gray-500 truncate">
+          {label}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-2">
@@ -292,38 +343,20 @@ export const DistributionForm: React.FC<DistributionFormProps> = ({ nodeId }) =>
     lastFocusedParamRef.current = paramName;
   }, []);
 
+  // P2 fix: route chip insertion through ParamField's local state
+  // instead of writing directly to store (which races with isEditingRef).
+  const [pendingInsert, setPendingInsert] = useState<{ param: string; text: string; key: number } | null>(null);
+
   const handleChipInsert = useCallback(
     (text: string) => {
-      // Determine which param to insert into
       let targetParam = lastFocusedParamRef.current;
       if (!targetParam && paramNames.length > 0) {
         targetParam = paramNames[0];
       }
       if (!targetParam) return;
-
-      // Get current value and append chip text
-      const state = useDAGStore.getState();
-      const node = state.nodes.find((n) => n.id === nodeId);
-      const currentValue = node?.data.config.distribution?.params[targetParam];
-      const currentText = currentValue !== undefined ? String(currentValue) : '';
-      const newText = currentText + text;
-
-      const currentDist = node?.data.config.distribution || {
-        type: distribution.type,
-        params: {},
-      };
-
-      updateNode(nodeId, {
-        distribution: {
-          ...currentDist,
-          params: {
-            ...currentDist.params,
-            [targetParam]: newText,
-          },
-        },
-      });
+      setPendingInsert({ param: targetParam, text, key: Date.now() });
     },
-    [nodeId, paramNames, distribution.type, updateNode]
+    [paramNames]
   );
 
   const [showInfo, setShowInfo] = useState(false);
@@ -449,6 +482,7 @@ export const DistributionForm: React.FC<DistributionFormProps> = ({ nodeId }) =>
               nodeId={nodeId}
               distributionType={distribution.type}
               onFocus={handleParamFocus}
+              pendingInsert={pendingInsert?.param === pName ? pendingInsert : null}
             />
           ))
         )}
