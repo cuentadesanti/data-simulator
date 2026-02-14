@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import type { ParamValue } from '../../types/dag';
+import type { ParamValue, LookupValue, MappingValue } from '../../types/dag';
 import type { DistributionInfo } from '../../services/api';
 import { useDAGStore } from '../../stores/dagStore';
 import { distributionsApi } from '../../services/api';
@@ -112,7 +112,7 @@ const ParamField: React.FC<{
 
   // P1: Object params (lookup/mapping) — render read-only, never coerce
   if (isObjectParam) {
-    const obj = storeValue as Record<string, unknown>;
+    const obj = storeValue as LookupValue | MappingValue;
     const label = 'lookup' in obj
       ? `lookup(${obj.lookup})`
       : 'mapping' in obj
