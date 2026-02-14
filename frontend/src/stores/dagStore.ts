@@ -496,3 +496,8 @@ export const selectLastValidationResult = (state: DAGState & DAGActions) =>
   state.lastValidationResult;
 // Deprecated selector for legacy layout fallback.
 export const selectActiveMainTab = (state: DAGState & DAGActions) => state.activeMainTab;
+
+// Expose store on window in dev mode for E2E testing
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__dagStore = useDAGStore;
+}

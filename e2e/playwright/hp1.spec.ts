@@ -14,10 +14,14 @@ test.describe('HP-1: Build DAG -> preview data', () => {
     // 3. Should see DAG canvas with validation chips
     await expect(page.getByText('Not validated')).toBeVisible({ timeout: 5000 });
 
-    // 4. Add a node via AddNodeDropdown (click the add node trigger)
-    const addNodeBtn = page.getByRole('button', { name: /Add Node|Stochastic/i }).first();
+    // 4. Add a node via AddNodeDropdown
+    const addNodeBtn = page.getByRole('button', { name: /Add Node/i }).first();
     if (await addNodeBtn.isVisible()) {
       await addNodeBtn.click();
+      // Click "Add Stochastic Node" from the dropdown menu
+      const stochasticOption = page.getByText('Add Stochastic Node');
+      await expect(stochasticOption).toBeVisible();
+      await stochasticOption.click();
     }
 
     // 5. Generate Preview
