@@ -147,4 +147,3 @@ def test_admin_can_create_pipeline_from_other_users_source(client: TestClient):
         headers={"x-test-user": "admin-user"},
     )
     assert response.status_code == 201
-    original_admin_user_ids = settings.admin_user_ids

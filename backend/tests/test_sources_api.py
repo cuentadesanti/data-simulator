@@ -110,4 +110,3 @@ def test_admin_can_access_sources_across_owners(client: TestClient):
     list_admin = client.get("/api/sources", params={"project_id": project_id}, headers={"x-test-user": "admin-user"})
     assert list_admin.status_code == 200
     assert len(list_admin.json()["sources"]) == 1
-    original_admin_user_ids = settings.admin_user_ids
