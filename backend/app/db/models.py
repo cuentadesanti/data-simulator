@@ -45,8 +45,8 @@ class Project(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    owner_user_id: Mapped[str] = mapped_column(String(255), nullable=False, default="legacy")
-    visibility: Mapped[str] = mapped_column(String(20), nullable=False, default="private")
+    owner_user_id: Mapped[str] = mapped_column(Text, nullable=False, default="legacy")
+    visibility: Mapped[str] = mapped_column(Text, nullable=False, default="private")
     forked_from_project_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
     )
