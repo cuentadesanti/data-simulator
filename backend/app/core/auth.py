@@ -3,7 +3,7 @@ from functools import lru_cache
 from typing import Any
 
 import jwt
-from fastapi import HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 from jwt import PyJWKClient
 
 from app.core.config import settings
@@ -119,6 +119,11 @@ def require_user_id(user: dict[str, Any]) -> str:
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     return user_id
+
+
+def current_user_context(user: dict[str, Any] = Depends(require_auth)) -> dict[str, str]:
+    """Return normalized current-user context for route dependencies."""
+    return {"user_id": require_user_id(user)}
 
 
 # Alias for compatibility

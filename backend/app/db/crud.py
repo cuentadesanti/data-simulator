@@ -30,6 +30,38 @@ def list_projects(db: Session, skip: int = 0, limit: int = 100) -> list[Project]
     return list(db.execute(stmt).scalars().all())
 
 
+def list_projects_for_owner(
+    db: Session,
+    *,
+    owner_user_id: str,
+    skip: int = 0,
+    limit: int = 100,
+) -> list[Project]:
+    """List projects owned by a specific user."""
+    stmt = (
+        select(Project)
+        .where(Project.owner_user_id == owner_user_id)
+        .offset(skip)
+        .limit(limit)
+        .order_by(Project.updated_at.desc())
+    )
+    return list(db.execute(stmt).scalars().all())
+
+
+def list_discoverable_projects(db: Session, *, user_id: str) -> list[Project]:
+    """List public projects visible to user that they do not own."""
+    stmt = (
+        select(Project)
+        .where(
+            Project.visibility == "public",
+            Project.owner_user_id != user_id,
+            Project.owner_user_id != "legacy",
+        )
+        .order_by(Project.updated_at.desc())
+    )
+    return list(db.execute(stmt).scalars().all())
+
+
 def get_project(db: Session, project_id: str) -> Project | None:
     """Get a project by ID."""
     return db.get(Project, project_id)
@@ -44,11 +76,20 @@ def get_project_by_name(db: Session, name: str) -> Project | None:
 def create_project(
     db: Session,
     name: str,
+    owner_user_id: str = "legacy",
     description: str | None = None,
+    visibility: str = "private",
+    forked_from_project_id: str | None = None,
     dag_definition: DAGDefinition | None = None,
 ) -> Project:
     """Create a new project, optionally with an initial DAG version."""
-    project = Project(name=name, description=description)
+    project = Project(
+        name=name,
+        owner_user_id=owner_user_id,
+        description=description,
+        visibility=visibility,
+        forked_from_project_id=forked_from_project_id,
+    )
     db.add(project)
     db.flush()  # Get the project ID
 

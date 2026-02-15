@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_auth, require_user_id
+from app.core.auth import current_user_context, require_auth, require_user_id
+from app.core.project_access import require_project_owner
 from app.core.config import settings
 from app.db import crud, get_db
 from app.services.upload_source import (
@@ -55,11 +56,10 @@ async def upload_source(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: dict[str, Any] = Depends(require_auth),
+    current_user: dict[str, str] = Depends(current_user_context),
 ) -> UploadSourceResponse:
     user_id = require_user_id(user)
-    project = crud.get_project(db, project_id)
-    if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    require_project_owner(db, project_id, current_user["user_id"])
 
     max_size = settings.upload_max_size_mb * 1024 * 1024
     chunks: list[bytes] = []
