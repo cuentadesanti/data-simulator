@@ -103,7 +103,7 @@ def test_create_pipeline_from_upload_forbidden_for_non_owner(client: TestClient)
         },
         headers={"x-test-user": "bob"},
     )
-    assert response.status_code == 403
+    assert response.status_code == 404
 
 
 def test_create_pipeline_from_upload_rejects_cross_project_source(client: TestClient):

@@ -6,7 +6,18 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,9 +36,20 @@ class Project(Base):
     """Project model for storing DAG projects."""
 
     __tablename__ = "projects"
+    __table_args__ = (
+        Index("ix_projects_owner_user_id", "owner_user_id"),
+        Index("ix_projects_visibility", "visibility"),
+        Index("ix_projects_forked_from_project_id", "forked_from_project_id"),
+        CheckConstraint("visibility IN ('private', 'public')", name="ck_projects_visibility"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    owner_user_id: Mapped[str] = mapped_column(Text, nullable=False, default="legacy")
+    visibility: Mapped[str] = mapped_column(Text, nullable=False, default="private")
+    forked_from_project_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False

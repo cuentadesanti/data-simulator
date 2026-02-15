@@ -8,8 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_auth
+from app.core.auth import current_user_context
+from app.core.project_access import raise_not_found, require_project_owner, require_project_read
 from app.db import crud, get_db
+from app.db.models import Pipeline
 from app.services import pipeline_service
 
 router = APIRouter()
@@ -22,7 +24,7 @@ router = APIRouter()
 
 class SimulationSource(BaseModel):
     """Source configuration for simulation-based pipeline."""
-    
+
     type: Literal["simulation"] = Field("simulation", description="Source type")
     dag_version_id: str = Field(..., description="ID of the DAG version to use")
     seed: int = Field(..., description="Random seed for reproducibility")
@@ -38,7 +40,7 @@ class UploadSource(BaseModel):
 
 class PipelineCreateRequest(BaseModel):
     """Request schema for creating a pipeline."""
-    
+
     project_id: str = Field(..., description="ID of the parent project")
     name: str = Field(..., min_length=1, max_length=255, description="Pipeline name")
     source: SimulationSource | UploadSource = Field(..., description="Source configuration")
@@ -46,7 +48,7 @@ class PipelineCreateRequest(BaseModel):
 
 class PipelineCreateResponse(BaseModel):
     """Response schema for pipeline creation."""
-    
+
     pipeline_id: str
     current_version_id: str
     schema: list[dict[str, Any]]
@@ -54,7 +56,7 @@ class PipelineCreateResponse(BaseModel):
 
 class StepSpec(BaseModel):
     """Specification for a transform step."""
-    
+
     type: str = Field(..., description="Transform type (e.g., 'formula', 'log')")
     output_column: str = Field(..., description="Name for the output column")
     params: dict[str, Any] = Field(default_factory=dict, description="Transform parameters")
@@ -63,14 +65,14 @@ class StepSpec(BaseModel):
 
 class AddStepRequest(BaseModel):
     """Request schema for adding a step."""
-    
+
     step: StepSpec
     preview_limit: int = Field(200, ge=1, le=1000, description="Preview row limit")
 
 
 class AddStepResponse(BaseModel):
     """Response schema for adding a step."""
-    
+
     new_version_id: str
     schema: list[dict[str, Any]]
     added_columns: list[str]
@@ -105,28 +107,28 @@ class ReorderStepsRequest(BaseModel):
 
 class MaterializeResponse(BaseModel):
     """Response schema for materialization."""
-    
+
     schema: list[dict[str, Any]]
     rows: list[dict[str, Any]]
 
 
 class ResimulateRequest(BaseModel):
     """Request schema for resimulation."""
-    
+
     seed: int = Field(..., description="New random seed")
     sample_size: int = Field(..., ge=1, le=100000, description="New sample size")
 
 
 class ResimulateResponse(BaseModel):
     """Response schema for resimulation."""
-    
+
     new_pipeline_id: str
     current_version_id: str
 
 
 class PipelineVersionSummary(BaseModel):
     """Summary of a pipeline version."""
-    
+
     id: str
     version_number: int
     steps_count: int
@@ -135,7 +137,7 @@ class PipelineVersionSummary(BaseModel):
 
 class PipelineDetail(BaseModel):
     """Detailed pipeline information."""
-    
+
     id: str
     project_id: str
     name: str
@@ -145,7 +147,7 @@ class PipelineDetail(BaseModel):
 
 class CurrentVersionDetail(BaseModel):
     """Details of the current pipeline version."""
-    
+
     id: str
     version_number: int
     steps: list[dict[str, Any]]
@@ -156,7 +158,7 @@ class CurrentVersionDetail(BaseModel):
 
 class PipelineResponse(BaseModel):
     """Response schema for getting a pipeline."""
-    
+
     pipeline: PipelineDetail
     current_version: CurrentVersionDetail | None
     versions_summary: list[PipelineVersionSummary]
@@ -164,7 +166,7 @@ class PipelineResponse(BaseModel):
 
 class PipelineSummary(BaseModel):
     """Summary of a pipeline for listing."""
-    
+
     id: str
     name: str
     source_type: str
@@ -175,8 +177,32 @@ class PipelineSummary(BaseModel):
 
 class PipelineListResponse(BaseModel):
     """Response schema for listing pipelines."""
-    
+
     pipelines: list[PipelineSummary]
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+
+def _require_pipeline_project(
+    db: Session,
+    pipeline_id: str,
+    user_id: str,
+    *,
+    require_owner: bool,
+) -> Pipeline:
+    pipeline = db.get(Pipeline, pipeline_id)
+    if not pipeline:
+        raise_not_found()
+
+    if require_owner:
+        require_project_owner(db, pipeline.project_id, user_id)
+    else:
+        require_project_read(db, pipeline.project_id, user_id)
+
+    return pipeline
 
 
 # =============================================================================
@@ -188,23 +214,19 @@ class PipelineListResponse(BaseModel):
 def create_pipeline(
     request: PipelineCreateRequest,
     db: Session = Depends(get_db),
-    user: dict[str, Any] = Depends(require_auth),
+    current_user: dict[str, str] = Depends(current_user_context),
 ) -> PipelineCreateResponse:
-    """Create a new pipeline from a simulation source.
-    
-    Creates a pipeline with version 1 containing empty transform steps.
-    The input schema is inferred from the simulation source.
-    """
+    """Create a new pipeline from a simulation or upload source."""
+    user_id = current_user["user_id"]
+    require_project_owner(db, request.project_id, user_id)
+
     try:
         if isinstance(request.source, UploadSource):
-            user_id = str(user.get("sub", "")).strip()
-            if not user_id:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
             source = crud.get_uploaded_source(db, request.source.source_id)
             if not source:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
+                raise_not_found()
             if source.created_by != user_id:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+                raise_not_found()
             if source.project_id != request.project_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -227,7 +249,7 @@ def create_pipeline(
             schema=result["schema"],
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -239,12 +261,10 @@ def add_step(
     version_id: str,
     request: AddStepRequest,
     db: Session = Depends(get_db),
+    current_user: dict[str, str] = Depends(current_user_context),
 ) -> AddStepResponse:
-    """Add a transform step to a pipeline.
-    
-    Creates a new version with the additional step. The new version
-    becomes the current version.
-    """
+    """Add a transform step to a pipeline."""
+    _require_pipeline_project(db, pipeline_id, current_user["user_id"], require_owner=True)
     try:
         result = pipeline_service.add_step(
             db=db,
@@ -261,7 +281,7 @@ def add_step(
             warnings=result["warnings"],
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -273,8 +293,10 @@ def reorder_steps(
     version_id: str,
     request: ReorderStepsRequest,
     db: Session = Depends(get_db),
+    current_user: dict[str, str] = Depends(current_user_context),
 ) -> PipelineVersionMutationResponse:
     """Reorder transform steps, creating a new pipeline version."""
+    _require_pipeline_project(db, pipeline_id, current_user["user_id"], require_owner=True)
     try:
         result = pipeline_service.reorder_steps(
             db=db,
@@ -292,9 +314,9 @@ def reorder_steps(
                 "affected_step_ids": e.affected_step_ids,
                 "affected_columns": e.affected_columns,
             },
-        )
+        ) from e
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.delete(
@@ -308,8 +330,10 @@ def delete_step(
     cascade: bool = Query(False, description="Whether to remove downstream dependent steps"),
     preview_limit: int = Query(200, ge=1, le=1000, description="Preview row limit"),
     db: Session = Depends(get_db),
+    current_user: dict[str, str] = Depends(current_user_context),
 ) -> DeleteStepResponse:
     """Delete a transform step and optionally cascade to dependent steps."""
+    _require_pipeline_project(db, pipeline_id, current_user["user_id"], require_owner=True)
     try:
         result = pipeline_service.delete_step(
             db=db,
@@ -328,9 +352,9 @@ def delete_step(
                 "affected_step_ids": e.affected_step_ids,
                 "affected_columns": e.affected_columns,
             },
-        )
+        ) from e
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.get(
@@ -343,17 +367,15 @@ def materialize(
     limit: int = Query(1000, ge=1, le=10000, description="Max rows to return"),
     columns: str | None = Query(None, description="Comma-separated column names"),
     db: Session = Depends(get_db),
+    current_user: dict[str, str] = Depends(current_user_context),
 ) -> MaterializeResponse:
-    """Materialize a pipeline version to data.
-    
-    Generates the data by loading the source and applying all transform
-    steps in order.
-    """
+    """Materialize a pipeline version to data."""
+    _require_pipeline_project(db, pipeline_id, current_user["user_id"], require_owner=False)
     try:
         column_list = None
         if columns:
             column_list = [c.strip() for c in columns.split(",") if c.strip()]
-        
+
         result = pipeline_service.materialize(
             db=db,
             pipeline_id=pipeline_id,
@@ -366,7 +388,7 @@ def materialize(
             rows=result["rows"],
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post(
@@ -378,12 +400,10 @@ def resimulate(
     version_id: str,
     request: ResimulateRequest,
     db: Session = Depends(get_db),
+    current_user: dict[str, str] = Depends(current_user_context),
 ) -> ResimulateResponse:
-    """Create a new pipeline with different seed/sample_size.
-    
-    Copies the transform steps from the source version to create
-    a new pipeline with a different source configuration.
-    """
+    """Create a new pipeline with different seed/sample_size."""
+    _require_pipeline_project(db, pipeline_id, current_user["user_id"], require_owner=True)
     try:
         result = pipeline_service.resimulate(
             db=db,
@@ -397,22 +417,21 @@ def resimulate(
             current_version_id=result["version_id"],
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.get("/{pipeline_id}", response_model=PipelineResponse)
 def get_pipeline(
     pipeline_id: str,
     db: Session = Depends(get_db),
+    current_user: dict[str, str] = Depends(current_user_context),
 ) -> PipelineResponse:
     """Get pipeline details with current version and version history."""
+    _require_pipeline_project(db, pipeline_id, current_user["user_id"], require_owner=False)
     result = pipeline_service.get_pipeline(db, pipeline_id)
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Pipeline '{pipeline_id}' not found",
-        )
-    
+        raise_not_found()
+
     return PipelineResponse(
         pipeline=PipelineDetail(**result["pipeline"]),
         current_version=CurrentVersionDetail(**result["current_version"]) if result["current_version"] else None,
@@ -424,8 +443,10 @@ def get_pipeline(
 def list_pipelines(
     project_id: str = Query(..., description="Project ID to list pipelines for"),
     db: Session = Depends(get_db),
+    current_user: dict[str, str] = Depends(current_user_context),
 ) -> PipelineListResponse:
     """List all pipelines for a project."""
+    require_project_read(db, project_id, current_user["user_id"])
     pipelines = pipeline_service.list_pipelines(db, project_id)
     return PipelineListResponse(
         pipelines=[PipelineSummary(**p) for p in pipelines]
