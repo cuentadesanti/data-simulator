@@ -327,15 +327,18 @@ def list_projects(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict[str, str] = Depends(current_user_context),
+    current_user: dict[str, Any] = Depends(current_user_context),
 ) -> ProjectListResponse:
-    """List projects owned by current user."""
-    projects = crud.list_projects_for_owner(
-        db,
-        owner_user_id=current_user["user_id"],
-        skip=skip,
-        limit=limit,
-    )
+    """List projects visible to current user."""
+    if current_user["is_admin"]:
+        projects = crud.list_projects(db, skip=skip, limit=limit)
+    else:
+        projects = crud.list_projects_for_owner(
+            db,
+            owner_user_id=current_user["user_id"],
+            skip=skip,
+            limit=limit,
+        )
     project_responses = [_serialize_project(project) for project in projects]
     return ProjectListResponse(projects=project_responses, total=len(project_responses))
 

@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.auth import require_auth
+from app.core.config import settings
 from app.db.database import Base, get_db
 from app.main import app
 
@@ -23,6 +24,7 @@ def client():
     )
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base.metadata.create_all(bind=engine)
+    original_admin_user_ids = settings.admin_user_ids
 
     def override_get_db():
         db = TestingSessionLocal()
@@ -41,6 +43,7 @@ def client():
     with TestClient(app) as test_client:
         yield test_client
 
+    settings.admin_user_ids = original_admin_user_ids
     app.dependency_overrides.clear()
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
@@ -124,3 +127,24 @@ def test_create_pipeline_from_upload_rejects_cross_project_source(client: TestCl
         headers={"x-test-user": "alice"},
     )
     assert response.status_code == 400
+
+
+def test_admin_can_create_pipeline_from_other_users_source(client: TestClient):
+    settings.admin_user_ids = "admin-user"
+    project_id = _create_project(client, "Owner Project Admin", user="alice")
+    source_id = _upload_source(client, project_id, user="alice")
+
+    response = client.post(
+        "/api/pipelines",
+        json={
+            "project_id": project_id,
+            "name": "Admin Upload Pipeline",
+            "source": {
+                "type": "upload",
+                "source_id": source_id,
+            },
+        },
+        headers={"x-test-user": "admin-user"},
+    )
+    assert response.status_code == 201
+    original_admin_user_ids = settings.admin_user_ids

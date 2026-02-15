@@ -8,8 +8,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy import func, select
 
+from app.core.auth import (
+    ensure_model_fit_access,
+    ensure_pipeline_version_access,
+    is_admin,
+    require_auth,
+    require_user_id,
+)
 from app.db import get_db
+from app.db.models import ModelFit, Pipeline, PipelineVersion, Project
 from app.services import modeling_service
 from app.services.model_registry import get_model_registry
 
@@ -265,6 +274,7 @@ class ModelFitsListResponse(BaseModel):
 def fit_model(
     request: FitRequest,
     db: Session = Depends(get_db),
+    user: dict[str, Any] = Depends(require_auth),
 ) -> FitResponse | JSONResponse:
     """Fit a model on pipeline data.
 
@@ -273,6 +283,7 @@ def fit_model(
 
     Returns structured errors on failure with field-specific suggestions.
     """
+    ensure_pipeline_version_access(db, request.pipeline_version_id, user)
     try:
         result = modeling_service.fit_model(
             db=db,
@@ -306,6 +317,7 @@ def fit_model(
 def predict(
     request: PredictRequest,
     db: Session = Depends(get_db),
+    user: dict[str, Any] = Depends(require_auth),
 ) -> PredictResponse | JSONResponse:
     """Generate predictions using a fitted model.
 
@@ -313,6 +325,9 @@ def predict(
 
     Returns structured errors on failure with suggestions.
     """
+    ensure_model_fit_access(db, request.model_id, user)
+    if request.pipeline_version_id:
+        ensure_pipeline_version_access(db, request.pipeline_version_id, user)
     try:
         result = modeling_service.predict(
             db=db,
@@ -370,15 +385,54 @@ def list_model_fits(
     limit: int = Query(50, ge=1, le=200, description="Maximum results to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
     db: Session = Depends(get_db),
+    user: dict[str, Any] = Depends(require_auth),
 ) -> ModelFitsListResponse:
     """List model fits with pagination.
     
     Optionally filter by pipeline version. Supports pagination via limit/offset.
     """
-    result = modeling_service.list_model_fits(db, pipeline_version_id, limit, offset)
+    admin = is_admin(user)
+    user_id = require_user_id(user)
+    if pipeline_version_id:
+        ensure_pipeline_version_access(db, pipeline_version_id, user)
+
+    stmt = (
+        select(ModelFit)
+        .join(PipelineVersion, ModelFit.pipeline_version_id == PipelineVersion.id)
+        .join(Pipeline, PipelineVersion.pipeline_id == Pipeline.id)
+        .join(Project, Pipeline.project_id == Project.id)
+    )
+    count_stmt = (
+        select(func.count())
+        .select_from(ModelFit)
+        .join(PipelineVersion, ModelFit.pipeline_version_id == PipelineVersion.id)
+        .join(Pipeline, PipelineVersion.pipeline_id == Pipeline.id)
+        .join(Project, Pipeline.project_id == Project.id)
+    )
+    if pipeline_version_id:
+        stmt = stmt.where(ModelFit.pipeline_version_id == pipeline_version_id)
+        count_stmt = count_stmt.where(ModelFit.pipeline_version_id == pipeline_version_id)
+    if not admin:
+        stmt = stmt.where(Project.owner_user_id == user_id, Project.owner_user_id != "legacy")
+        count_stmt = count_stmt.where(Project.owner_user_id == user_id, Project.owner_user_id != "legacy")
+    stmt = stmt.order_by(ModelFit.created_at.desc()).offset(offset).limit(limit)
+    model_fits = db.execute(stmt).scalars().all()
+    total_count = db.execute(count_stmt).scalar() or 0
+
     return ModelFitsListResponse(
-        model_fits=[ModelFitSummary(**m) for m in result["model_fits"]],
-        total_count=result["total_count"],
+        model_fits=[
+            ModelFitSummary(
+                id=m.id,
+                name=m.name,
+                model_type=m.model_type,
+                task_type=m.task_type,
+                target_column=m.target_column,
+                metrics=m.metrics,
+                created_at=m.created_at.isoformat(),
+            )
+            for m in model_fits
+        ],
+        total_count=total_count,
     )
 
 
@@ -386,8 +440,10 @@ def list_model_fits(
 def get_model_fit(
     model_id: str,
     db: Session = Depends(get_db),
+    user: dict[str, Any] = Depends(require_auth),
 ) -> ModelFitDetail:
     """Get model fit details."""
+    ensure_model_fit_access(db, model_id, user)
     result = modeling_service.get_model_fit(db, model_id)
     if not result:
         raise HTTPException(

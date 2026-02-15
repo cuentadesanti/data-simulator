@@ -131,8 +131,7 @@ def get_source(
     source = crud.get_uploaded_source(db, source_id)
     if not source:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
-    if source.created_by != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    require_project_owner(db, source.project_id, user_id)
     return SourceMetadataResponse(
         id=source.id,
         project_id=source.project_id,
@@ -153,7 +152,8 @@ def list_sources(
     user: dict[str, Any] = Depends(require_auth),
 ) -> SourceListResponse:
     user_id = require_user_id(user)
-    rows = crud.list_uploaded_sources(db, project_id=project_id, created_by=user_id)
+    require_project_owner(db, project_id, user_id)
+    rows = crud.list_uploaded_sources(db, project_id=project_id)
     return SourceListResponse(
         sources=[
             SourceMetadataResponse(
@@ -182,8 +182,7 @@ def delete_source(
     source = crud.get_uploaded_source(db, source_id)
     if not source:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
-    if source.created_by != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    require_project_owner(db, source.project_id, user_id)
 
     if source.storage_uri:
         try:

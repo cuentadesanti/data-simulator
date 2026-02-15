@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     auth_bypass: bool = False  # Dev-only bypass for local runs
     clerk_issuer: str = ""  # Expected issuer domain, e.g., "https://clerk.data-simulator.com"
                              # Leave empty to accept any issuer (less secure, backward compatible)
+    admin_user_ids: str = ""  # Comma-separated Clerk user IDs with admin override access
 
     # CORS - comma-separated list of allowed origins, or "*" for all (default)
     # WARNING: "*" allows all origins. In production, set to your specific domain(s).
