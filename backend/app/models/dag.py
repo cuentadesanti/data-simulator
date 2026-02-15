@@ -295,6 +295,17 @@ class Layout(BaseModel):
 
 
 # =============================================================================
+# Context Variable Metadata (UI-only, roundtripped through save/load)
+# =============================================================================
+
+
+class ContextVariableMeta(BaseModel):
+    """UI metadata for a single context variable (type info for the editor)."""
+
+    type: Literal["number", "boolean", "dict", "array", "unsupported"]
+
+
+# =============================================================================
 # DAG Definition (Top-level)
 # =============================================================================
 
@@ -308,6 +319,10 @@ class DAGDefinition(BaseModel):
     context: dict[str, Any] = Field(
         default_factory=dict,
         description="Context: mappings, constants, mini-tables",
+    )
+    context_meta: dict[str, ContextVariableMeta] = Field(
+        default_factory=dict,
+        description="UI metadata for context variables (type info for editor)",
     )
     constraints: list[Constraint] = Field(default_factory=list, description="Row constraints")
     metadata: GenerationMetadata = Field(..., description="Generation metadata")

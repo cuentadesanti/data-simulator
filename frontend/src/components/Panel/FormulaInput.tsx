@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useDAGStore } from '../../stores/dagStore';
 import { getEffectiveVarName } from '../../types/dag';
+import { buildSuggestions, FORMULA_RESERVED_NAMES, type FormulaSuggestion } from '../../utils/buildSuggestions';
 
 interface FormulaInputProps {
   value: string;
@@ -8,6 +9,8 @@ interface FormulaInputProps {
   nodeId: string;
   placeholder?: string;
   compact?: boolean;
+  onBlurCapture?: () => void;
+  onFocusCapture?: () => void;
 }
 
 interface ValidationError {
@@ -15,14 +18,6 @@ interface ValidationError {
   type: 'syntax' | 'reference';
 }
 
-interface Suggestion {
-  id: string;
-  name: string;
-  type: 'node' | 'constant' | 'function';
-  insertText: string;
-}
-
-const FUNCTIONS = ['abs', 'min', 'max', 'sqrt', 'pow', 'exp', 'log', 'round', 'floor', 'ceil', 'clamp', 'if_else'];
 const CONSTANTS = ['PI', 'E', 'TRUE', 'FALSE'];
 
 export const FormulaInput: React.FC<FormulaInputProps> = ({
@@ -31,13 +26,16 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
   nodeId,
   placeholder = 'e.g., parent_node * 2',
   compact = false,
+  onBlurCapture,
+  onFocusCapture,
 }) => {
   const nodes = useDAGStore((state) => state.nodes);
   const edges = useDAGStore((state) => state.edges);
   const context = useDAGStore((state) => state.context);
+  const contextMeta = useDAGStore((state) => state.contextMeta);
 
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<FormulaSuggestion[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -48,14 +46,16 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
     [edges, nodeId]
   );
 
-  const availableVariables = useMemo(
+  const parentVariables = useMemo(
     () =>
       nodes
         .filter((n) => parentIds.has(n.id))
         .map((n) => ({
-          id: n.id,
           varName: getEffectiveVarName(n.data.config),
           name: n.data.config.name,
+          kind: n.data.config.kind,
+          dtype: n.data.config.dtype || undefined,
+          scope: n.data.config.scope,
         })),
     [nodes, parentIds]
   );
@@ -65,11 +65,11 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
   const availableVarSet = useMemo(
     () =>
       new Set([
-        ...availableVariables.map((v) => v.varName),
+        ...parentVariables.map((v) => v.varName),
         ...contextKeys,
         ...CONSTANTS,
       ]),
-    [availableVariables, contextKeys]
+    [parentVariables, contextKeys]
   );
 
   // Validation
@@ -78,7 +78,6 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
       const errors: ValidationError[] = [];
       if (!formula.trim()) return errors;
 
-      // Check parentheses
       let parenCount = 0;
       for (const char of formula) {
         if (char === '(') parenCount++;
@@ -92,15 +91,13 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
         errors.push({ message: 'Unclosed parenthesis', type: 'syntax' });
       }
 
-      // Check variable references
       const variablePattern = /\b([a-z_][a-z0-9_]*)\b(?!\s*\()/gi;
       const matches = formula.matchAll(variablePattern);
       const invalidVars = new Set<string>();
 
       for (const match of matches) {
         const varName = match[1];
-        const lowerVar = varName.toLowerCase();
-        if (!availableVarSet.has(varName) && !FUNCTIONS.includes(lowerVar)) {
+        if (!availableVarSet.has(varName) && !FORMULA_RESERVED_NAMES.has(varName.toLowerCase())) {
           invalidVars.add(varName);
         }
       }
@@ -122,35 +119,10 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
     setValidationErrors(errors);
   }, [value, validateFormula]);
 
-  // Build suggestions
+  // Build suggestions using shared utility
   const allSuggestions = useMemo(
-    (): Suggestion[] => [
-      ...availableVariables.map((v) => ({
-        id: v.varName,
-        name: v.name,
-        type: 'node' as const,
-        insertText: v.varName,
-      })),
-      ...contextKeys.map((key) => ({
-        id: key,
-        name: key,
-        type: 'node' as const,
-        insertText: key,
-      })),
-      ...CONSTANTS.map((c) => ({
-        id: c,
-        name: c,
-        type: 'constant' as const,
-        insertText: c,
-      })),
-      ...FUNCTIONS.map((f) => ({
-        id: f,
-        name: f,
-        type: 'function' as const,
-        insertText: f + '(',
-      })),
-    ],
-    [availableVariables, contextKeys]
+    () => buildSuggestions(parentVariables, context, contextMeta),
+    [parentVariables, context, contextMeta]
   );
 
   const getCurrentWord = (text: string, position: number) => {
@@ -183,7 +155,7 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
   );
 
   const insertSuggestion = useCallback(
-    (suggestion: Suggestion) => {
+    (suggestion: FormulaSuggestion) => {
       const input = inputRef.current;
       if (!input) return;
 
@@ -245,30 +217,45 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
             updateSuggestions(e.target.value, e.target.selectionStart || 0);
           }}
           onKeyDown={handleKeyDown}
-          onFocus={() => updateSuggestions(value, inputRef.current?.selectionStart || 0)}
-          onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+          onFocus={() => {
+            onFocusCapture?.();
+            updateSuggestions(value, inputRef.current?.selectionStart || 0);
+          }}
+          onBlur={() => {
+            setTimeout(() => setShowSuggestions(false), 150);
+            onBlurCapture?.();
+          }}
           placeholder={placeholder}
-          className={`flex-1 px-3 py-2 border rounded-md shadow-sm focus:ring-2 text-sm font-mono ${
-            hasValue
-              ? isValid
-                ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
-                : 'border-red-300 focus:ring-red-500 focus:border-red-500'
-              : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-          }`}
+          className={compact
+            ? `flex-1 px-2 py-1.5 border rounded-md text-sm font-mono focus:ring-1 ${
+                hasValue
+                  ? isValid
+                    ? 'border-gray-200 focus:ring-blue-500 focus:border-blue-500'
+                    : 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                  : 'border-gray-200 focus:ring-blue-500 focus:border-blue-500'
+              }`
+            : `flex-1 px-3 py-2 border rounded-md shadow-sm focus:ring-2 text-sm font-mono ${
+                hasValue
+                  ? isValid
+                    ? 'border-green-300 focus:ring-green-500 focus:border-green-500'
+                    : 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                  : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+              }`
+          }
         />
         {hasValue && (
           <span
-            className={`text-xs px-1.5 py-0.5 rounded ${
+            className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
               isValid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
             }`}
           >
-            {isValid ? '✓' : '!'}
+            {isValid ? '\u2713' : '!'}
           </span>
         )}
       </div>
 
       {/* Validation errors */}
-      {!compact && validationErrors.length > 0 && (
+      {validationErrors.length > 0 && (
         <div className="mt-1 text-xs text-red-600">
           {validationErrors.map((err, i) => (
             <div key={i}>{err.message}</div>
@@ -292,14 +279,27 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
                 className={`text-xs px-1 rounded ${
                   suggestion.type === 'node'
                     ? 'bg-blue-100 text-blue-700'
-                    : suggestion.type === 'constant'
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-purple-100 text-purple-700'
+                    : suggestion.type === 'context'
+                      ? 'bg-purple-100 text-purple-700'
+                      : suggestion.type === 'constant'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-purple-100 text-purple-700'
                 }`}
               >
-                {suggestion.type === 'node' ? 'var' : suggestion.type === 'constant' ? 'const' : 'fn'}
+                {suggestion.type === 'node'
+                  ? 'var'
+                  : suggestion.type === 'context'
+                    ? 'ctx'
+                    : suggestion.type === 'constant'
+                      ? 'const'
+                      : 'fn'}
               </span>
               <span className="font-mono">{suggestion.id}</span>
+              {suggestion.description && (
+                <span className="text-xs text-gray-500 ml-auto truncate max-w-[80px]">
+                  {suggestion.description}
+                </span>
+              )}
             </button>
           ))}
         </div>
