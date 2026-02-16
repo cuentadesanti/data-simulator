@@ -52,6 +52,12 @@ strict = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+filterwarnings = [
+    'ignore:Field name "schema" in .* shadows an attribute in parent "BaseModel":UserWarning',
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

@@ -110,13 +110,14 @@ export function distributionToLatex(dist: DistributionConfig | undefined): strin
       return `\\text{LogN}(${mu}, ${sigma}^2)`;
     }
 
-    default:
+    default: {
       // Generic distribution with type name
       const paramList = Object.entries(params)
         .slice(0, 2)
         .map(([, v]) => paramToString(v))
         .join(', ');
       return `\\text{${type}}(${paramList})`;
+    }
   }
 }
 
