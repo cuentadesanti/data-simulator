@@ -225,12 +225,19 @@ def create_pipeline(
             source = crud.get_uploaded_source(db, request.source.source_id)
             if not source:
                 raise_not_found()
-            if source.created_by != user_id:
-                raise_not_found()
             if source.project_id != request.project_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Uploaded source must belong to the target project",
+                )
+        else:
+            dag_version = crud.get_version(db, request.source.dag_version_id)
+            if not dag_version:
+                raise_not_found()
+            if dag_version.project_id != request.project_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="DAG version must belong to the target project",
                 )
 
         result = pipeline_service.create_pipeline(

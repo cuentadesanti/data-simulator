@@ -40,7 +40,7 @@ def list_projects_for_owner(
     """List projects owned by a specific user."""
     stmt = (
         select(Project)
-        .where(Project.owner_user_id == owner_user_id)
+        .where(Project.owner_user_id == owner_user_id, Project.owner_user_id != "legacy")
         .offset(skip)
         .limit(limit)
         .order_by(Project.updated_at.desc())

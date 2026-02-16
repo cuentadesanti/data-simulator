@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.auth import require_auth
+from app.core.config import settings
 from app.db.database import Base, get_db
 from app.main import app
 
@@ -31,8 +33,11 @@ def client():
         finally:
             db.close()
 
-    async def override_require_auth():
-        return {"sub": "test-user", "user_id": "test-user"}
+    original_admin_user_ids = settings.admin_user_ids
+
+    async def override_require_auth(request: Request):
+        user = request.headers.get("x-test-user", "test-user")
+        return {"sub": user, "user_id": user}
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[require_auth] = override_require_auth
@@ -40,6 +45,7 @@ def client():
     with TestClient(app) as test_client:
         yield test_client
 
+    settings.admin_user_ids = original_admin_user_ids
     app.dependency_overrides.clear()
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
@@ -95,6 +101,45 @@ def _create_project_and_pipeline(client: TestClient) -> tuple[str, str, str]:
     assert pipeline.status_code == 201
     pipeline_data = pipeline.json()
     return project_id, pipeline_data["pipeline_id"], pipeline_data["current_version_id"]
+
+
+def _create_project_and_pipeline_for_user(client: TestClient, user: str) -> tuple[str, str, str]:
+    dag_definition = {
+        "schema_version": "1.0",
+        "nodes": [
+            {
+                "id": "income",
+                "name": "Income",
+                "kind": "stochastic",
+                "dtype": "float",
+                "scope": "row",
+                "distribution": {"type": "normal", "params": {"mu": 50000, "sigma": 10000}},
+            }
+        ],
+        "edges": [],
+        "metadata": {"sample_size": 100, "seed": 42, "preview_rows": 10},
+    }
+    project = client.post("/api/projects", json={"name": f"{user}-project", "dag_definition": dag_definition}, headers={"x-test-user": user})
+    assert project.status_code == 201
+    project_data = project.json()
+    project_id = project_data["id"]
+    dag_version_id = project_data["current_version"]["id"]
+    pipeline = client.post(
+        "/api/pipelines",
+        json={
+            "project_id": project_id,
+            "name": f"{user}-pipeline",
+            "source": {
+                "type": "simulation",
+                "dag_version_id": dag_version_id,
+                "seed": 42,
+                "sample_size": 100,
+            },
+        },
+        headers={"x-test-user": user},
+    )
+    assert pipeline.status_code == 201
+    return project_id, pipeline.json()["pipeline_id"], pipeline.json()["current_version_id"]
 
 
 def _add_formula_step(
@@ -224,3 +269,16 @@ def test_reorder_steps_invalid_dependency_returns_409(client: TestClient):
     assert reorder.status_code == 409
     detail = reorder.json()["detail"]
     assert "affected_columns" in detail
+
+
+def test_non_owner_cannot_get_pipeline(client: TestClient):
+    _, pipeline_id, _ = _create_project_and_pipeline_for_user(client, "alice")
+    response = client.get(f"/api/pipelines/{pipeline_id}", headers={"x-test-user": "bob"})
+    assert response.status_code == 404
+
+
+def test_admin_can_get_other_users_pipeline(client: TestClient):
+    settings.admin_user_ids = "admin-user"
+    _, pipeline_id, _ = _create_project_and_pipeline_for_user(client, "alice")
+    response = client.get(f"/api/pipelines/{pipeline_id}", headers={"x-test-user": "admin-user"})
+    assert response.status_code == 200

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -36,9 +37,12 @@ def client():
         finally:
             db.close()
 
-    async def override_require_auth():
+    original_admin_user_ids = settings.admin_user_ids
+
+    async def override_require_auth(request: Request):
         """Override auth dependency for testing."""
-        return {"sub": "test-user", "user_id": "test-user"}
+        user = request.headers.get("x-test-user", "test-user")
+        return {"sub": user, "user_id": user}
 
     # Override dependencies
     app.dependency_overrides[get_db] = override_get_db
@@ -48,6 +52,7 @@ def client():
         yield test_client
 
     # Clean up
+    settings.admin_user_ids = original_admin_user_ids
     app.dependency_overrides.clear()
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
@@ -156,6 +161,46 @@ class TestProjectsCRUD:
         data = response.json()
         assert data["total"] == 2
         assert len(data["projects"]) == 2
+
+    def test_non_owner_cannot_access_project(self, client):
+        create_response = client.post(
+            "/api/projects",
+            json={"name": "Private Project"},
+            headers={"x-test-user": "alice"},
+        )
+        project_id = create_response.json()["id"]
+
+        response = client.get(f"/api/projects/{project_id}", headers={"x-test-user": "bob"})
+        assert response.status_code == 404
+
+    def test_admin_can_access_other_users_project(self, client):
+        settings.admin_user_ids = "admin-user"
+        create_response = client.post(
+            "/api/projects",
+            json={"name": "Owner Project"},
+            headers={"x-test-user": "alice"},
+        )
+        project_id = create_response.json()["id"]
+
+        response = client.get(f"/api/projects/{project_id}", headers={"x-test-user": "admin-user"})
+        assert response.status_code == 200
+
+    def test_non_admin_project_list_is_owner_scoped(self, client):
+        client.post("/api/projects", json={"name": "A1"}, headers={"x-test-user": "alice"})
+        client.post("/api/projects", json={"name": "B1"}, headers={"x-test-user": "bob"})
+
+        response = client.get("/api/projects", headers={"x-test-user": "alice"})
+        assert response.status_code == 200
+        assert response.json()["total"] == 1
+
+    def test_admin_project_list_sees_all_projects(self, client):
+        settings.admin_user_ids = "admin-user"
+        client.post("/api/projects", json={"name": "A2"}, headers={"x-test-user": "alice"})
+        client.post("/api/projects", json={"name": "B2"}, headers={"x-test-user": "bob"})
+
+        response = client.get("/api/projects", headers={"x-test-user": "admin-user"})
+        assert response.status_code == 200
+        assert response.json()["total"] == 2
 
 
 class TestDAGVersions:
