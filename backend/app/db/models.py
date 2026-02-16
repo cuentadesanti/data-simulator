@@ -149,7 +149,7 @@ class Pipeline(Base):
         String(50), nullable=False, default="simulation"
     )  # "simulation" | "upload"
     current_version_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("pipeline_versions.id", ondelete="SET NULL"), nullable=True
+        String(36), ForeignKey("pipeline_versions.id", ondelete="SET NULL", use_alter=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False

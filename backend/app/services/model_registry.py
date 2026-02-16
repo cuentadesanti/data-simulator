@@ -801,6 +801,7 @@ EXCLUDED_ESTIMATORS = {
     "GammaRegressor",  # GLM
     "PoissonRegressor",  # GLM
     "TweedieRegressor",  # GLM
+    "OrthogonalMatchingPursuitCV",  # Requires min 2 features (sklearn limitation)
 }
 
 # Category mapping based on module path

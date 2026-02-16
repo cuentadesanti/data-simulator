@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="DS_", extra="ignore")
 
     # API
     app_name: str = "Data Simulator"
@@ -50,10 +52,6 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./data_simulator.db"
 
-    class Config:
-        env_file = ".env"
-        env_prefix = "DS_"
-        extra = "ignore"
 
 
 settings = Settings()
