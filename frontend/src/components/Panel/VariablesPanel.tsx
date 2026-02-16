@@ -70,8 +70,9 @@ const DictEditor: React.FC<{
   };
 
   const removeEntry = (key: string) => {
-    const { [key]: _, ...rest } = value;
-    onChange(rest);
+    const copy = { ...value };
+    delete copy[key];
+    onChange(copy);
   };
 
   return (

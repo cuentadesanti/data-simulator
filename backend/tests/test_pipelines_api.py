@@ -119,7 +119,10 @@ def _create_project_and_pipeline_for_user(client: TestClient, user: str) -> tupl
         "edges": [],
         "metadata": {"sample_size": 100, "seed": 42, "preview_rows": 10},
     }
-    project = client.post("/api/projects", json={"name": f"{user}-project", "dag_definition": dag_definition}, headers={"x-test-user": user})
+    project = client.post(
+        "/api/projects", json={"name": f"{user}-project", "dag_definition": dag_definition},
+        headers={"x-test-user": user},
+    )
     assert project.status_code == 201
     project_data = project.json()
     project_id = project_data["id"]

@@ -116,6 +116,7 @@ export const FormulaInput: React.FC<FormulaInputProps> = ({
 
   useEffect(() => {
     const errors = validateFormula(value);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- derived validation state synced from value changes
     setValidationErrors(errors);
   }, [value, validateFormula]);
 

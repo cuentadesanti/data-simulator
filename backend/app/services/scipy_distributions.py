@@ -8,12 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
 from scipy import stats
-from scipy.stats._distn_infrastructure import rv_continuous_frozen, rv_discrete_frozen
 
 from app.models.distribution import DistributionInfo, ParameterInfo
-
 
 # Exclusion list for distributions that are deprecated, internal, or problematic
 EXCLUDED_DISTRIBUTIONS = {

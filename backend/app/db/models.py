@@ -59,7 +59,7 @@ class Project(Base):
     )
 
     # Relationship to versions with cascade delete
-    versions: Mapped[list["DAGVersion"]] = relationship(
+    versions: Mapped[list[DAGVersion]] = relationship(
         "DAGVersion",
         back_populates="project",
         cascade="all, delete-orphan",
@@ -67,14 +67,14 @@ class Project(Base):
     )
 
     # Relationship to pipelines
-    pipelines: Mapped[list["Pipeline"]] = relationship(
+    pipelines: Mapped[list[Pipeline]] = relationship(
         "Pipeline",
         back_populates="project",
         cascade="all, delete-orphan",
     )
 
     @property
-    def current_version(self) -> "DAGVersion | None":
+    def current_version(self) -> DAGVersion | None:
         """Get the current (active) version."""
         for version in self.versions:
             if version.is_current:
@@ -120,7 +120,7 @@ class DAGVersion(Base):
     is_current: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationship back to project
-    project: Mapped["Project"] = relationship("Project", back_populates="versions")
+    project: Mapped[Project] = relationship("Project", back_populates="versions")
 
     def __repr__(self) -> str:
         return f"<DAGVersion(id={self.id}, project_id={self.project_id}, version={self.version_number})>"
@@ -156,15 +156,15 @@ class Pipeline(Base):
     )
 
     # Relationships
-    project: Mapped["Project"] = relationship("Project", back_populates="pipelines")
-    versions: Mapped[list["PipelineVersion"]] = relationship(
+    project: Mapped[Project] = relationship("Project", back_populates="pipelines")
+    versions: Mapped[list[PipelineVersion]] = relationship(
         "PipelineVersion",
         back_populates="pipeline",
         cascade="all, delete-orphan",
         foreign_keys="PipelineVersion.pipeline_id",
         order_by="desc(PipelineVersion.version_number)",
     )
-    current_version: Mapped["PipelineVersion | None"] = relationship(
+    current_version: Mapped[PipelineVersion | None] = relationship(
         "PipelineVersion",
         foreign_keys=[current_version_id],
         post_update=True,
@@ -226,15 +226,15 @@ class PipelineVersion(Base):
     )
 
     # Relationship back to pipeline
-    pipeline: Mapped["Pipeline"] = relationship(
+    pipeline: Mapped[Pipeline] = relationship(
         "Pipeline", 
         back_populates="versions",
         foreign_keys=[pipeline_id],
     )
-    source_upload: Mapped["UploadedSource | None"] = relationship("UploadedSource")
+    source_upload: Mapped[UploadedSource | None] = relationship("UploadedSource")
     
     # Relationship to model fits
-    model_fits: Mapped[list["ModelFit"]] = relationship(
+    model_fits: Mapped[list[ModelFit]] = relationship(
         "ModelFit",
         back_populates="pipeline_version",
         cascade="all, delete-orphan",
@@ -291,7 +291,7 @@ class ModelFit(Base):
     )
 
     # Relationship back to pipeline version
-    pipeline_version: Mapped["PipelineVersion"] = relationship(
+    pipeline_version: Mapped[PipelineVersion] = relationship(
         "PipelineVersion", back_populates="model_fits"
     )
 
@@ -323,7 +323,7 @@ class UploadedSource(Base):
         DateTime, server_default=func.now(), nullable=False
     )
 
-    project: Mapped["Project"] = relationship("Project")
+    project: Mapped[Project] = relationship("Project")
 
     def __repr__(self) -> str:
         return f"<UploadedSource(id={self.id}, project_id={self.project_id}, format={self.format})>"

@@ -62,6 +62,7 @@ const ParamField: React.FC<{
   );
   const isEditingRef = useRef(false);
   const localTextRef = useRef(localText);
+  // eslint-disable-next-line react-hooks/refs -- keeping ref in sync with local state for async chip insertion
   localTextRef.current = localText;
   const lastInsertKeyRef = useRef(0);
 

@@ -69,6 +69,7 @@ export const PipelineAnalysisTabs = ({
 
     useEffect(() => {
         if (diagnostics) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-switch to diagnostics tab when results arrive
             setActiveTab('diagnostics');
         }
     }, [diagnostics]);

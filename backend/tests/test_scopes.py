@@ -6,6 +6,7 @@ Fase 4: Scopes global/row (MVP) + group scope (extended)
 
 import numpy as np
 import pytest
+
 from app.models.dag import (
     DAGDefinition,
     DAGEdge,

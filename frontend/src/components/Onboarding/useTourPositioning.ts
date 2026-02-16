@@ -64,6 +64,7 @@ export function useTourPositioning(selector: string | null): DOMRect | null {
 
   useEffect(() => {
     if (!selector) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing derived state when selector is removed
       setRect(null);
       return;
     }

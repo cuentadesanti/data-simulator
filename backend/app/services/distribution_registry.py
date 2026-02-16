@@ -163,7 +163,7 @@ class NormalDistribution(BaseDistribution):
         try:
             return rng.normal(loc=mu, scale=sigma, size=size)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class UniformDistribution(BaseDistribution):
@@ -219,7 +219,7 @@ class UniformDistribution(BaseDistribution):
         try:
             return rng.uniform(low=low, high=high, size=size)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class CategoricalDistribution(BaseDistribution):
@@ -282,7 +282,7 @@ class CategoricalDistribution(BaseDistribution):
             try:
                 probs = [float(p.strip()) for p in raw_probs.split(",") if p.strip()]
             except ValueError as e:
-                raise DistributionError(self.name, f"probs must be numeric values: {str(e)}")
+                raise DistributionError(self.name, f"probs must be numeric values: {str(e)}") from e
         elif isinstance(raw_probs, list):
             probs = raw_probs
         else:
@@ -312,7 +312,7 @@ class CategoricalDistribution(BaseDistribution):
         try:
             probs_array = np.array(probs, dtype=float)
         except (ValueError, TypeError) as e:
-            raise DistributionError(self.name, f"probs must be numeric values: {str(e)}")
+            raise DistributionError(self.name, f"probs must be numeric values: {str(e)}") from e
 
         if np.any(probs_array < 0):
             raise DistributionError(self.name, "All probabilities must be non-negative")
@@ -329,7 +329,7 @@ class CategoricalDistribution(BaseDistribution):
             indices = rng.choice(len(categories), size=size, p=probs_array)
             return np.array([categories[i] for i in indices], dtype=object)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class BernoulliDistribution(BaseDistribution):
@@ -378,7 +378,7 @@ class BernoulliDistribution(BaseDistribution):
             # Generate uniform random numbers and threshold at p
             return (rng.uniform(0, 1, size=size) < p).astype(int)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class PoissonDistribution(BaseDistribution):
@@ -411,7 +411,7 @@ class PoissonDistribution(BaseDistribution):
         try:
             return rng.poisson(lam=lam, size=size)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class ExponentialDistribution(BaseDistribution):
@@ -444,7 +444,7 @@ class ExponentialDistribution(BaseDistribution):
         try:
             return rng.exponential(scale=scale, size=size)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class BetaDistribution(BaseDistribution):
@@ -488,7 +488,7 @@ class BetaDistribution(BaseDistribution):
         try:
             return rng.beta(a=a, b=b, size=size)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class GammaDistribution(BaseDistribution):
@@ -532,7 +532,7 @@ class GammaDistribution(BaseDistribution):
         try:
             return rng.gamma(shape=shape, scale=scale, size=size)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class LogNormalDistribution(BaseDistribution):
@@ -573,7 +573,7 @@ class LogNormalDistribution(BaseDistribution):
         try:
             return rng.lognormal(mean=mean, sigma=sigma, size=size)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class BinomialDistribution(BaseDistribution):
@@ -619,7 +619,7 @@ class BinomialDistribution(BaseDistribution):
         try:
             return rng.binomial(n=n, p=p, size=size)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class TriangularDistribution(BaseDistribution):
@@ -669,7 +669,7 @@ class TriangularDistribution(BaseDistribution):
         try:
             return rng.triangular(left=left, mode=mode, right=right, size=size)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class WeibullDistribution(BaseDistribution):
@@ -714,7 +714,7 @@ class WeibullDistribution(BaseDistribution):
             # NumPy's weibull doesn't have scale, so we multiply
             return scale * rng.weibull(a=a, size=size)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class ChiSquareDistribution(BaseDistribution):
@@ -747,7 +747,7 @@ class ChiSquareDistribution(BaseDistribution):
         try:
             return rng.chisquare(df=df, size=size)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class StudentTDistribution(BaseDistribution):
@@ -799,7 +799,7 @@ class StudentTDistribution(BaseDistribution):
         try:
             return loc + scale * rng.standard_t(df=df, size=size)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class ScipyDistributionWrapper(BaseDistribution):
@@ -929,7 +929,7 @@ class ScipyDistributionWrapper(BaseDistribution):
             samples = frozen.rvs(size=size, random_state=rng)
             return np.asarray(samples)
         except Exception as e:
-            raise DistributionError(self.name, f"Sampling failed: {str(e)}")
+            raise DistributionError(self.name, f"Sampling failed: {str(e)}") from e
 
 
 class DistributionRegistry:
@@ -988,11 +988,11 @@ class DistributionRegistry:
                 wrapper = ScipyDistributionWrapper(scipy_name)
                 self._scipy_cache[name] = wrapper
                 return wrapper
-            except ValueError:
+            except ValueError as e:
                 raise DistributionError(
                     name,
                     f"Unknown scipy distribution: {scipy_name}",
-                )
+                ) from e
 
         # Not found
         available = list(self._distributions.keys())

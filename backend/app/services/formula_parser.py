@@ -24,7 +24,6 @@ from app.core.exceptions import (
 )
 from app.models.dag import LookupValue, MappingValue
 
-
 # =============================================================================
 # Custom Functions
 # =============================================================================
@@ -210,8 +209,6 @@ class NameResolver:
                 return LookupProxy(value, name)
             return value
 
-        # Name not found - collect available names for error message
-        available = sorted(list(self.row_data.keys()) + list(self.all_names.keys()))
         raise NameNotDefined(name, self)
 
     def __contains__(self, name: str) -> bool:
@@ -438,7 +435,7 @@ def parse_formula(
             )
         else:
             available = []
-        raise UnknownVariableError(str(e.name), available)
+        raise UnknownVariableError(str(e.name), available) from e
 
     except (LookupKeyMissingError, UnknownVariableError):
         # Re-raise our custom errors as-is
@@ -449,11 +446,11 @@ def parse_formula(
         raise FormulaParseError(
             formula=formula,
             error_msg=str(e),
-        )
+        ) from e
 
     except Exception as e:
         # Catch-all for unexpected errors
         raise FormulaParseError(
             formula=formula,
             error_msg=f"Unexpected error: {type(e).__name__}: {e}",
-        )
+        ) from e

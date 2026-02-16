@@ -18,8 +18,8 @@ from app.db import crud
 from app.db.models import Pipeline, PipelineVersion
 from app.services.hashing import fingerprint_source, hash_steps
 from app.services.pipeline_source import (
-    load_source,
     load_simulation_source,
+    load_source,
 )
 from app.services.transform_registry import get_transform_registry
 

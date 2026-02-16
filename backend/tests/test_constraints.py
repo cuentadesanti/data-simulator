@@ -1278,7 +1278,7 @@ class TestConstraintIntegration:
         result2 = generate_preview(make_test_dag(42))
 
         # Results should be identical
-        for r1, r2 in zip(result1.data, result2.data):
+        for r1, r2 in zip(result1.data, result2.data, strict=True):
             assert r1["x"] == r2["x"]
 
     def test_constraints_do_not_break_topological_order(self):
@@ -1542,5 +1542,5 @@ class TestConstraintEdgeCases:
         result2 = generate_preview(make_dag_with_constraint_order([c2, c1]))
 
         # Results should be identical regardless of constraint order
-        for r1, r2 in zip(result1.data, result2.data):
+        for r1, r2 in zip(result1.data, result2.data, strict=True):
             assert r1["value"] == r2["value"]

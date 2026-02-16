@@ -16,14 +16,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from app.main import app
 

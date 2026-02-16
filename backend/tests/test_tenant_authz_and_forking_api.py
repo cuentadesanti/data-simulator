@@ -66,7 +66,9 @@ def _sample_dag() -> dict:
     }
 
 
-def _create_project(client: TestClient, *, user: str, name: str, visibility: str = "private", with_dag: bool = False) -> dict:
+def _create_project(
+    client: TestClient, *, user: str, name: str, visibility: str = "private", with_dag: bool = False,
+) -> dict:
     payload = {"name": name, "visibility": visibility}
     if with_dag:
         payload["dag_definition"] = _sample_dag()

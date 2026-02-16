@@ -12,20 +12,13 @@ This test suite covers Phase 6-7 features:
 
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 import pytest
-import scipy.stats as stats
 
 from app.core.exceptions import DistributionError
-from app.models.distribution import DistributionInfo, ParameterInfo
 from app.services.distribution_registry import (
-    BaseDistribution,
-    DistributionRegistry,
     get_distribution_registry,
 )
-
 
 # =============================================================================
 # SciPy Integration Tests

@@ -6,21 +6,18 @@ and UI grouping features.
 
 from __future__ import annotations
 
-import pytest
-
 from app.services.model_registry import (
-    ModelRegistry,
-    ModelParameter,
-    _discover_sklearn_regressors,
-    _get_param_ui_group,
-    _class_name_to_snake_case,
-    _extract_sklearn_params,
-    get_model_registry,
-    CORE_PARAMS,
     ADVANCED_PARAMS,
+    CORE_PARAMS,
     INTERNAL_PARAMS,
+    ModelParameter,
+    ModelRegistry,
+    _class_name_to_snake_case,
+    _discover_sklearn_regressors,
+    _extract_sklearn_params,
+    _get_param_ui_group,
+    get_model_registry,
 )
-
 
 # =============================================================================
 # Auto-Discovery Tests

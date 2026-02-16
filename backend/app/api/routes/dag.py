@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from app.core.rate_limiter import GENERATE_RATE_LIMIT, PREVIEW_RATE_LIMIT, limiter
 from app.models.dag import DAGDefinition, ValidationResult
-from app.models.generation import GenerationResult, PreviewResponse
+from app.models.generation import PreviewResponse
 from app.services.validator import validate_dag
 
 router = APIRouter()

@@ -15,7 +15,6 @@ These tests serve as TDD specifications for the feature.
 from __future__ import annotations
 
 import json
-import os
 import time
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -602,7 +601,7 @@ class TestOutputStorage:
         metadata_file = Path(f"./outputs/{job_id}/metadata.json")
         assert metadata_file.exists(), "metadata.json should exist"
 
-        with open(metadata_file, "r") as f:
+        with open(metadata_file) as f:
             metadata = json.load(f)
 
         assert metadata["job_id"] == job_id

@@ -28,12 +28,10 @@ from app.models.dag import (
     DAGEdge,
     DistributionConfig,
     GenerationMetadata,
-    LookupValue,
-    MappingValue,
     NodeConfig,
     PostProcessing,
 )
-from app.services.sampler import _generate_data, generate_data_with_df
+from app.services.sampler import _generate_data
 
 
 def compute_csv_hash(df: pd.DataFrame) -> str:
@@ -195,7 +193,10 @@ GOLDEN_HASHES = {
         "csv_hash": "7ce2ec7584ceffd633ce71c355895a17c97ee7b310972e430d27aa1aab1977b0",
     },
     "comprehensive_features": {
-        "description": "Comprehensive DAG with all features: categorical root, lookup params, formulas, global scope, group scope, post-processing",
+        "description": (
+            "Comprehensive DAG with all features: categorical root, lookup params, "
+            "formulas, global scope, group scope, post-processing"
+        ),
         "dag_config": {
             "nodes": [
                 # Categorical root node
@@ -503,7 +504,7 @@ class TestCrossRunDeterminism:
 
         # Generate 3 times
         hashes = []
-        for i in range(3):
+        for _i in range(3):
             df, *_ = _generate_data(dag, 500, seed=123)
             hashes.append(compute_csv_hash(df))
 
