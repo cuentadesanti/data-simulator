@@ -16,12 +16,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from app.core import SampleError, ValidationError, settings
+from app.core import SampleError, ValidationError
 from app.core.exceptions import DistributionError
 from app.models.dag import DAGDefinition, NodeConfig, PostProcessing
 from app.models.generation import ColumnStats, GenerationResult, PreviewResponse
 from app.services.distribution_registry import get_distribution_registry
-from app.services.formula_parser import parse_formula, resolve_param_value
+from app.services.formula_parser import resolve_param_value
 from app.services.validator import validate_dag
 from app.utils.topological_sort import topological_sort
 
@@ -211,7 +211,7 @@ def _generate_data(
         raise SampleError(
             message=f"Failed to determine node ordering: {str(e)}",
             details={"error": str(e)},
-        )
+        ) from e
 
     # Step 3: Create node lookup for easy access
     node_map = {node.id: node for node in dag.nodes}
@@ -260,14 +260,14 @@ def _generate_data(
                 distribution_type=e.details.get("distribution_type", "unknown"),
                 error_msg=str(e.message),
                 node_id=node_id,
-            )
+            ) from e
         except Exception as e:
             # Wrap unexpected errors
             raise SampleError(
                 message=f"Failed to generate node '{node.name}': {str(e)}",
                 node_id=node_id,
                 details={"error": str(e), "error_type": type(e).__name__},
-            )
+            ) from e
 
     return df, seed, warnings
 
@@ -478,7 +478,7 @@ def _sample_deterministic_node(
                     "error": str(e),
                     "error_type": type(e).__name__,
                 },
-            )
+            ) from e
 
     return values
 
@@ -892,7 +892,7 @@ def _compute_column_stats(df: pd.DataFrame, dag: DAGDefinition) -> list[ColumnSt
                 min_val = float(series.min()) if not series.isna().all() else None
                 max_val = float(series.max()) if not series.isna().all() else None
                 median = float(series.median()) if not series.isna().all() else None
-            except:
+            except Exception:
                 pass  # Skip if computation fails
 
         # Categorical stats
@@ -903,7 +903,7 @@ def _compute_column_stats(df: pd.DataFrame, dag: DAGDefinition) -> list[ColumnSt
                 total = series.notna().sum()
                 if total > 0:
                     category_rates = {str(k): float(v) / total for k, v in value_counts.items()}
-            except:
+            except Exception:
                 pass  # Skip if computation fails
 
         stats_list.append(

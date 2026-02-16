@@ -10,7 +10,6 @@ import csv
 import io
 import json
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -151,8 +150,9 @@ class TestGenerateEndpointReturnsData:
 
     def test_generate_parquet_is_readable(self):
         """Parquet output should be readable by pandas."""
-        import pandas as pd
         from io import BytesIO
+
+        import pandas as pd
 
         response = client.post("/api/dag/generate?format=parquet", json=TEST_DAG)
 

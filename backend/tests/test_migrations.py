@@ -22,13 +22,7 @@ import pytest
 from app.core.config import CURRENT_SCHEMA_VERSION
 from app.models.dag import (
     DAGDefinition,
-    DAGEdge,
-    DistributionConfig,
-    GenerationMetadata,
-    NodeConfig,
-    PostProcessing,
 )
-
 
 # =============================================================================
 # Test Fixtures - DAGs for different schema versions
@@ -280,6 +274,7 @@ class TestMigrationInfrastructure:
     def test_get_migration_path_no_path_raises_error(self):
         """Test that requesting impossible migration raises clear error."""
         from app.services.migrations import get_migration_path
+
         from app.core.exceptions import MigrationError
 
         with pytest.raises(MigrationError) as exc_info:
@@ -318,6 +313,7 @@ class TestVersionDetection:
     def test_detect_version_missing_raises_error(self):
         """Test that missing schema_version raises error."""
         from app.services.migrations import detect_version
+
         from app.core.exceptions import MigrationError
 
         dag_dict = {"nodes": [], "edges": []}
@@ -330,6 +326,7 @@ class TestVersionDetection:
     def test_detect_version_invalid_type_raises_error(self):
         """Test that invalid schema_version type raises error."""
         from app.services.migrations import detect_version
+
         from app.core.exceptions import MigrationError
 
         dag_dict = {"schema_version": 1.0, "nodes": []}  # float instead of string
@@ -460,6 +457,7 @@ class TestBasicMigration:
     def test_load_unsupported_version_raises_error(self):
         """Test that unsupported version raises clear error."""
         from app.services.migrations import load_dag
+
         from app.core.exceptions import MigrationError
 
         dag_dict = {"schema_version": "99.0", "nodes": [], "edges": []}
@@ -633,6 +631,7 @@ class TestBackwardCompatibility:
     def test_old_dag_works_with_current_sampler(self):
         """Test that migrated old DAG works with current sampler."""
         from app.services.migrations import load_dag
+
         from app.services.sampler import generate_preview
 
         dag_dict = v1_0_simple_dag()
@@ -650,6 +649,7 @@ class TestBackwardCompatibility:
     def test_old_dag_with_lookups_works(self):
         """Test that migrated old DAG with lookups still works."""
         from app.services.migrations import load_dag
+
         from app.services.sampler import generate_preview
 
         dag_dict = v1_0_complex_dag()
@@ -746,6 +746,7 @@ class TestMigrationErrors:
     def test_invalid_dag_structure_raises_clear_error(self):
         """Test that invalid DAG structure raises clear error."""
         from app.services.migrations import load_dag
+
         from app.core.exceptions import MigrationError
 
         # Missing required fields
@@ -760,6 +761,7 @@ class TestMigrationErrors:
     def test_corrupted_data_raises_clear_error(self):
         """Test that corrupted data raises clear error."""
         from app.services.migrations import load_dag
+
         from app.core.exceptions import MigrationError
 
         dag_dict = v1_0_simple_dag()
@@ -776,6 +778,7 @@ class TestMigrationErrors:
     def test_unknown_version_provides_helpful_message(self):
         """Test that unknown version provides helpful error message."""
         from app.services.migrations import load_dag
+
         from app.core.exceptions import MigrationError
 
         dag_dict = {"schema_version": "999.0", "nodes": [], "edges": []}
@@ -934,8 +937,9 @@ class TestMigrationPerformance:
     @pytest.mark.slow
     def test_migration_performance_large_dag(self):
         """Test migration performance with large DAG (100+ nodes)."""
-        from app.services.migrations import load_dag
         import time
+
+        from app.services.migrations import load_dag
 
         # Create large v1.0 DAG
         nodes = []

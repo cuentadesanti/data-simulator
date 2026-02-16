@@ -71,7 +71,10 @@ def _create_pipeline(client: TestClient, user: str) -> str:
         "edges": [],
         "metadata": {"sample_size": 100, "seed": 42},
     }
-    project = client.post("/api/projects", json={"name": f"{user}-modeling", "dag_definition": dag}, headers={"x-test-user": user})
+    project = client.post(
+        "/api/projects", json={"name": f"{user}-modeling", "dag_definition": dag},
+        headers={"x-test-user": user},
+    )
     assert project.status_code == 201
     project_id = project.json()["id"]
     dag_version_id = project.json()["current_version"]["id"]

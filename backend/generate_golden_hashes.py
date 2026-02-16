@@ -7,7 +7,6 @@ tests/test_determinism_golden.py in the GOLDEN_HASHES dictionary.
 
 import hashlib
 import io
-import sys
 
 import pandas as pd
 

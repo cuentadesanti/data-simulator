@@ -24,6 +24,7 @@ export const ProjectSessionPicker = () => {
 
   useEffect(() => {
     if (!currentProjectId || currentProject?.versions) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clear error before async fetch
     setVersionError(null);
     void fetchVersions(currentProjectId).catch((error) => {
       console.error('Failed to load project versions:', error);

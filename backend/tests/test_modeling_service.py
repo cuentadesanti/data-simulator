@@ -11,10 +11,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.database import Base
-from app.db.models import DAGVersion, ModelFit, Pipeline, PipelineVersion, Project
+from app.db.models import DAGVersion, ModelFit, Project
 from app.services import modeling_service, pipeline_service
 from app.services.model_registry import get_model_registry
-
 
 # =============================================================================
 # Fixtures
@@ -160,7 +159,6 @@ class TestModelRegistry:
         model = registry.get("linear_regression")
 
         params = model.parameters
-        param_names = [p.name for p in params]
         assert len(params) >= 0
 
 

@@ -68,7 +68,7 @@ def main():
     # Count occurrences
     unique, counts = np.unique(samples, return_counts=True)
     print("Counts:")
-    for cat, count in zip(unique, counts):
+    for cat, count in zip(unique, counts, strict=False):
         print(f"  {cat}: {count} ({count / 20 * 100:.1f}%)")
 
     # Bernoulli distribution

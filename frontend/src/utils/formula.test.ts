@@ -63,9 +63,9 @@ describe('Formula Utils', () => {
 
         it('handles empty input', () => {
             expect(toCanonical('', {})).toBe('');
-            // @ts-ignore
+            // @ts-expect-error testing invalid input
             expect(toCanonical(null, {})).toBe('');
-            // @ts-ignore
+            // @ts-expect-error testing invalid input
             expect(toCanonical(undefined, {})).toBe('');
         });
     });

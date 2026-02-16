@@ -11,8 +11,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.auth import current_user_context, require_auth, require_user_id
-from app.core.project_access import require_project_owner
 from app.core.config import settings
+from app.core.project_access import require_project_owner
 from app.db import crud, get_db
 from app.services.upload_source import (
     compute_upload_fingerprint,

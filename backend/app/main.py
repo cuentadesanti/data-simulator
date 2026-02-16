@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -12,9 +12,9 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.routes import dag, distributions, modeling, pipelines, projects, public, sources, transforms, ux_metrics
 from app.core import DataSimulatorError, settings
+from app.core.auth import require_auth
 from app.core.config import get_cors_origins
 from app.core.rate_limiter import limiter
-from app.core.auth import require_auth
 
 app = FastAPI(
     title=settings.app_name,
@@ -57,7 +57,9 @@ app.include_router(public.router, prefix="/api/public", tags=["Public"])
 app.include_router(projects.router, prefix="/api/projects", tags=["Projects"], dependencies=[Depends(require_auth)])
 app.include_router(pipelines.router, prefix="/api/pipelines", tags=["Pipelines"], dependencies=[Depends(require_auth)])
 app.include_router(sources.router, prefix="/api/sources", tags=["Sources"], dependencies=[Depends(require_auth)])
-app.include_router(transforms.router, prefix="/api/transforms", tags=["Transforms"], dependencies=[Depends(require_auth)])
+app.include_router(
+    transforms.router, prefix="/api/transforms", tags=["Transforms"], dependencies=[Depends(require_auth)],
+)
 app.include_router(modeling.router, prefix="/api/modeling", tags=["Modeling"], dependencies=[Depends(require_auth)])
 app.include_router(ux_metrics.router, prefix="/api/ux", tags=["UX Metrics"], dependencies=[Depends(require_auth)])
 

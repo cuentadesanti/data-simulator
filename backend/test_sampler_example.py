@@ -6,13 +6,13 @@ It's meant as documentation and for manual testing when dependencies are install
 
 from app.models.dag import (
     DAGDefinition,
-    NodeConfig,
     DAGEdge,
     DistributionConfig,
     GenerationMetadata,
+    NodeConfig,
     PostProcessing,
 )
-from app.services.sampler import generate_preview, generate_data
+from app.services.sampler import generate_data, generate_preview
 
 
 def example_simple_dag():
@@ -184,10 +184,10 @@ def run_examples():
     preview1 = generate_preview(dag1)
     print(f"Generated {preview1.rows} preview rows")
     print(f"Columns: {preview1.columns}")
-    print(f"First 3 rows:")
+    print("First 3 rows:")
     for row in preview1.data[:3]:
         print(f"  {row}")
-    print(f"\nColumn Stats:")
+    print("\nColumn Stats:")
     for stat in preview1.column_stats:
         print(f"  {stat.node_id}: mean={stat.mean:.1f}, std={stat.std:.1f}")
 
@@ -198,7 +198,7 @@ def run_examples():
     preview2 = generate_preview(dag2)
     print(f"Generated {preview2.rows} preview rows")
     print(f"Columns: {preview2.columns}")
-    print(f"First 3 rows:")
+    print("First 3 rows:")
     for row in preview2.data[:3]:
         print(
             f"  height={row['height_cm']:.1f}, weight={row['weight_kg']:.1f}, bmi={row['bmi']:.1f}"
@@ -210,10 +210,10 @@ def run_examples():
     dag3 = example_categorical_dag()
     preview3 = generate_preview(dag3)
     print(f"Generated {preview3.rows} preview rows")
-    print(f"First 5 rows:")
+    print("First 5 rows:")
     for row in preview3.data[:5]:
         print(f"  region={row['region']}, is_urban={row['is_urban']}")
-    print(f"\nRegion distribution:")
+    print("\nRegion distribution:")
     region_stats = next(s for s in preview3.column_stats if s.node_id == "region")
     for cat, rate in region_stats.category_rates.items():
         print(f"  {cat}: {rate:.1%}")
@@ -224,7 +224,7 @@ def run_examples():
     dag4 = example_with_context()
     preview4 = generate_preview(dag4)
     print(f"Generated {preview4.rows} preview rows")
-    print(f"First 5 rows:")
+    print("First 5 rows:")
     for row in preview4.data[:5]:
         print(f"  region={row['region']}, base_salary=${row['base_salary']:,.0f}")
 

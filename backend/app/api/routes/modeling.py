@@ -7,8 +7,8 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from app.core.auth import (
     ensure_model_fit_access,

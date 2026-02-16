@@ -7,14 +7,12 @@ as pipeline steps to derive new columns from existing data.
 from __future__ import annotations
 
 import ast
-import math
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Protocol
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
-
 
 # =============================================================================
 # Transform Protocol
@@ -182,7 +180,7 @@ class FormulaTransform(Transform):
             return result, {"warnings_count": 0}
             
         except Exception as e:
-            raise ValueError(f"Formula evaluation failed: {e}")
+            raise ValueError(f"Formula evaluation failed: {e}") from e
 
 
 class LogTransform(Transform):
@@ -412,7 +410,7 @@ class BinTransform(Transform):
         values = df[column].astype(float)
         
         if labels_str:
-            labels = [l.strip() for l in labels_str.split(",")]
+            labels = [label.strip() for label in labels_str.split(",")]
             if len(labels) != bins:
                 raise ValueError(f"Number of labels ({len(labels)}) must match number of bins ({bins})")
             result = pd.cut(values, bins=bins, labels=labels)
@@ -496,7 +494,7 @@ def validate_safe_expression(expression: str, available_columns: list[str]) -> N
     try:
         tree = ast.parse(expression, mode="eval")
     except SyntaxError as e:
-        raise ValueError(f"Invalid expression syntax: {e}")
+        raise ValueError(f"Invalid expression syntax: {e}") from e
     
     # Count and validate nodes
     node_count = 0
@@ -604,13 +602,13 @@ def _build_eval_context(df: pd.DataFrame) -> dict[str, Any]:
 class TransformRegistry:
     """Registry of available transforms."""
     
-    _instance: "TransformRegistry | None" = None
+    _instance: TransformRegistry | None = None
     
     def __init__(self):
         self._transforms: dict[str, Transform] = {}
     
     @classmethod
-    def get_instance(cls) -> "TransformRegistry":
+    def get_instance(cls) -> TransformRegistry:
         """Get the singleton registry instance."""
         if cls._instance is None:
             cls._instance = cls()

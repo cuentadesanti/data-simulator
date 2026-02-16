@@ -12,16 +12,12 @@ This module provides comprehensive validation for DAG definitions including:
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Set
+from typing import Any
 
 from app.core import (
     RESERVED_CONTEXT,
     RESERVED_FUNCTIONS,
     CycleDetectedError,
-    InvalidNodeError,
-    LimitError,
-    MissingParentError,
-    ReservedKeywordError,
     settings,
 )
 from app.core.exceptions import FormulaParseError
@@ -39,8 +35,8 @@ from app.utils.topological_sort import topological_sort
 
 
 def _add_error(
-    errors: List[str],
-    structured_errors: List[ValidationError],
+    errors: list[str],
+    structured_errors: list[ValidationError],
     code: ErrorCode,
     message: str,
     node_id: str | None = None,
@@ -104,11 +100,11 @@ def validate_dag(dag: DAGDefinition) -> ValidationResult:
         ... else:
         ...     print(f"Errors: {result.errors}")
     """
-    errors: List[str] = []
-    warnings: List[str] = []
-    structured_errors: List[ValidationError] = []
-    edge_statuses: List[EdgeValidation] = []
-    missing_edges: List[dict[str, str]] = []
+    errors: list[str] = []
+    warnings: list[str] = []
+    structured_errors: list[ValidationError] = []
+    edge_statuses: list[EdgeValidation] = []
+    missing_edges: list[dict[str, str]] = []
 
     # Build node lookup for name resolution
     node_lookup = {n.id: n for n in dag.nodes}
@@ -151,7 +147,7 @@ def validate_dag(dag: DAGDefinition) -> ValidationResult:
         errors.append(str(e))
 
     # Step 5: Run topological sort (detects cycles)
-    topological_order: List[str] | None = None
+    topological_order: list[str] | None = None
     try:
         topological_order = topological_sort(dag.nodes, dag.edges)
     except CycleDetectedError as e:
@@ -204,9 +200,9 @@ def validate_dag(dag: DAGDefinition) -> ValidationResult:
 
 def _validate_limits(
     dag: DAGDefinition,
-    errors: List[str],
-    structured_errors: List[ValidationError],
-    node_lookup: Dict[str, NodeConfig],
+    errors: list[str],
+    structured_errors: list[ValidationError],
+    node_lookup: dict[str, NodeConfig],
 ) -> None:
     """Validate DAG doesn't exceed configured limits.
 
@@ -259,7 +255,10 @@ def _validate_limits(
                 errors,
                 structured_errors,
                 code="LIMIT_EXCEEDED",
-                message=f"Node '{node.name}': Formula length {len(node.formula)} exceeds maximum {settings.max_formula_length}",
+                message=(
+                    f"Node '{node.name}': Formula length {len(node.formula)} "
+                    f"exceeds maximum {settings.max_formula_length}"
+                ),
                 node_id=node.id,
                 node_name=node.name,
                 suggestion="Simplify the formula or break it into multiple nodes",
@@ -273,9 +272,9 @@ def _validate_limits(
 
 def _validate_reserved_keywords(
     dag: DAGDefinition,
-    errors: List[str],
-    structured_errors: List[ValidationError],
-    node_lookup: Dict[str, NodeConfig],
+    errors: list[str],
+    structured_errors: list[ValidationError],
+    node_lookup: dict[str, NodeConfig],
 ) -> None:
     """Validate node IDs and context keys don't use reserved keywords.
 
@@ -314,9 +313,9 @@ def _validate_reserved_keywords(
 
 def _validate_formula_syntax(
     dag: DAGDefinition,
-    errors: List[str],
-    structured_errors: List[ValidationError],
-    node_lookup: Dict[str, NodeConfig],
+    errors: list[str],
+    structured_errors: list[ValidationError],
+    node_lookup: dict[str, NodeConfig],
 ) -> None:
     """Validate formula syntax for deterministic nodes.
 
@@ -335,12 +334,9 @@ def _validate_formula_syntax(
     # Build mappings for var_name resolution
     # node_id -> var_name
     id_to_var_name = {node.id: node.effective_var_name for node in dag.nodes}
-    # var_name -> node_id (for reverse lookup)
-    var_name_to_id = {node.effective_var_name: node.id for node in dag.nodes}
-
     # Build parent map: node_id -> set of parent var_names (from edges)
     # This matches what generation does - only expose parent columns by var_name
-    parent_var_names: Dict[str, Set[str]] = {node.id: set() for node in dag.nodes}
+    parent_var_names: dict[str, set[str]] = {node.id: set() for node in dag.nodes}
     for edge in dag.edges:
         if edge.target in parent_var_names and edge.source in id_to_var_name:
             # Store the var_name of the parent, not the ID
@@ -405,7 +401,10 @@ def _validate_formula_syntax(
                         message=f"Node '{node.name}': {error_str}",
                         node_id=node.id,
                         node_name=node.name,
-                        suggestion=f"Available variables: {', '.join(sorted(available_vars)) if available_vars else 'none (add parent edges first)'}",
+                        suggestion=(
+                            f"Available variables: {', '.join(sorted(available_vars))}"
+                            if available_vars else "Available variables: none (add parent edges first)"
+                        ),
                         context={"formula": node.formula, "available_vars": sorted(available_vars)},
                     )
                 else:
@@ -422,11 +421,11 @@ def _validate_formula_syntax(
 
 
 def _validate_edges(
-    edges: List[DAGEdge],
-    node_ids: Set[str],
-    errors: List[str],
-    structured_errors: List[ValidationError],
-    node_lookup: Dict[str, NodeConfig],
+    edges: list[DAGEdge],
+    node_ids: set[str],
+    errors: list[str],
+    structured_errors: list[ValidationError],
+    node_lookup: dict[str, NodeConfig],
 ) -> None:
     """Validate all edges reference existing nodes.
 
@@ -466,12 +465,12 @@ def _validate_edges(
 
 
 def _validate_group_by_references(
-    nodes: List[NodeConfig],
-    edges: List[DAGEdge],
-    node_ids: Set[str],
-    errors: List[str],
-    structured_errors: List[ValidationError],
-    node_lookup: Dict[str, NodeConfig],
+    nodes: list[NodeConfig],
+    edges: list[DAGEdge],
+    node_ids: set[str],
+    errors: list[str],
+    structured_errors: list[ValidationError],
+    node_lookup: dict[str, NodeConfig],
 ) -> None:
     """Validate group_by references point to existing ancestor nodes.
 
@@ -508,7 +507,10 @@ def _validate_group_by_references(
                     message=f"Node '{node.name}': group_by references non-existent node '{node.group_by}'",
                     node_id=node.id,
                     node_name=node.name,
-                    suggestion=f"Use one of the existing categorical nodes: {', '.join(categorical_names)}" if categorical_names else "Create a categorical node first",
+                    suggestion=(
+                        f"Use one of the existing categorical nodes: {', '.join(categorical_names)}"
+                        if categorical_names else "Create a categorical node first"
+                    ),
                     context={"group_by": node.group_by, "available_categorical": categorical_names},
                 )
                 continue
@@ -520,10 +522,16 @@ def _validate_group_by_references(
                     errors,
                     structured_errors,
                     code="INVALID_GROUP_BY",
-                    message=f"Node '{node.name}': group_by '{ref_node.name if ref_node else node.group_by}' must be an ancestor node",
+                    message=(
+                        f"Node '{node.name}': group_by "
+                        f"'{ref_node.name if ref_node else node.group_by}' must be an ancestor node"
+                    ),
                     node_id=node.id,
                     node_name=node.name,
-                    suggestion=f"Add an edge from '{ref_node.name if ref_node else node.group_by}' to '{node.name}' to establish the dependency",
+                    suggestion=(
+                        f"Add an edge from '{ref_node.name if ref_node else node.group_by}' "
+                        f"to '{node.name}' to establish the dependency"
+                    ),
                     context={"group_by": node.group_by},
                 )
                 continue
@@ -537,11 +545,21 @@ def _validate_group_by_references(
                         errors,
                         structured_errors,
                         code="INVALID_GROUP_BY",
-                        message=f"Node '{node.name}': group_by node '{ref_node.name}' must be categorical (dtype='category'), but has dtype='{ref_node.dtype}'",
+                        message=(
+                            f"Node '{node.name}': group_by node '{ref_node.name}' must be categorical "
+                            f"(dtype='category'), but has dtype='{ref_node.dtype}'"
+                        ),
                         node_id=node.id,
                         node_name=node.name,
-                        suggestion=f"Change '{ref_node.name}' dtype to 'category', or use a different categorical node: {', '.join(categorical_names)}" if categorical_names else f"Change '{ref_node.name}' dtype to 'category'",
-                        context={"group_by": node.group_by, "expected_dtype": "category", "actual_dtype": ref_node.dtype},
+                        suggestion=(
+                            f"Change '{ref_node.name}' dtype to 'category', or use a different "
+                            f"categorical node: {', '.join(categorical_names)}"
+                        ) if categorical_names else f"Change '{ref_node.name}' dtype to 'category'",
+                        context={
+                            "group_by": node.group_by,
+                            "expected_dtype": "category",
+                            "actual_dtype": ref_node.dtype,
+                        },
                     )
 
                 # Check group_by references a row-scoped node (v1 restriction)
@@ -550,18 +568,24 @@ def _validate_group_by_references(
                         errors,
                         structured_errors,
                         code="INVALID_GROUP_BY",
-                        message=f"Node '{node.name}': group_by node '{ref_node.name}' must be row-scoped, but has scope='{ref_node.scope}'",
+                        message=(
+                            f"Node '{node.name}': group_by node '{ref_node.name}' must be "
+                            f"row-scoped, but has scope='{ref_node.scope}'"
+                        ),
                         node_id=node.id,
                         node_name=node.name,
-                        suggestion=f"Change '{ref_node.name}' scope to 'row', or use a different row-scoped categorical node",
+                        suggestion=(
+                            f"Change '{ref_node.name}' scope to 'row', "
+                            "or use a different row-scoped categorical node"
+                        ),
                         context={"group_by": node.group_by, "expected_scope": "row", "actual_scope": ref_node.scope},
                     )
 
 
 def _build_ancestor_map(
-    nodes: List[NodeConfig],
-    edges: List[DAGEdge],
-) -> Dict[str, Set[str]]:
+    nodes: list[NodeConfig],
+    edges: list[DAGEdge],
+) -> dict[str, set[str]]:
     """Build a map of node -> all its ancestors.
 
     Uses DFS to find all nodes reachable via incoming edges.
@@ -574,14 +598,14 @@ def _build_ancestor_map(
         Dictionary mapping each node ID to the set of all its ancestor node IDs
     """
     # Build reverse adjacency list (child -> parents)
-    parents: Dict[str, List[str]] = {node.id: [] for node in nodes}
+    parents: dict[str, list[str]] = {node.id: [] for node in nodes}
     for edge in edges:
         parents[edge.target].append(edge.source)
 
     # For each node, find all ancestors via DFS
-    ancestors: Dict[str, Set[str]] = {}
+    ancestors: dict[str, set[str]] = {}
 
-    def find_ancestors(node_id: str, visited: Set[str]) -> Set[str]:
+    def find_ancestors(node_id: str, visited: set[str]) -> set[str]:
         """Recursively find all ancestors of a node."""
         if node_id in ancestors:
             return ancestors[node_id]
@@ -591,7 +615,7 @@ def _build_ancestor_map(
             return set()
 
         visited.add(node_id)
-        result: Set[str] = set()
+        result: set[str] = set()
 
         for parent in parents[node_id]:
             result.add(parent)
@@ -608,9 +632,9 @@ def _build_ancestor_map(
 
 def _generate_warnings(
     dag: DAGDefinition,
-    warnings: List[str],
-    structured_errors: List[ValidationError],
-    node_lookup: Dict[str, NodeConfig],
+    warnings: list[str],
+    structured_errors: list[ValidationError],
+    node_lookup: dict[str, NodeConfig],
 ) -> None:
     """Generate warnings for common issues that aren't errors.
 
@@ -686,7 +710,7 @@ def _generate_warnings(
         )
 
 
-def _extract_references_from_formula(formula: str) -> Set[str]:
+def _extract_references_from_formula(formula: str) -> set[str]:
     """Extract variable references from a formula string.
 
     Handles both plain variable names (e.g., 'base_salary') and canonical
@@ -718,7 +742,7 @@ def _extract_references_from_formula(formula: str) -> Set[str]:
     return references
 
 
-def _extract_references_from_params(params: Dict[str, Any], node_ids: Set[str]) -> Set[str]:
+def _extract_references_from_params(params: dict[str, Any], node_ids: set[str]) -> set[str]:
     """Extract node references from distribution parameters.
 
     Args:
@@ -728,7 +752,7 @@ def _extract_references_from_params(params: Dict[str, Any], node_ids: Set[str]) 
     Returns:
         Set of node IDs referenced in the parameters
     """
-    references: Set[str] = set()
+    references: set[str] = set()
 
     for key, value in params.items():
         # Skip passthrough params (categories, probs) - they don't reference nodes
@@ -752,7 +776,7 @@ def _extract_references_from_params(params: Dict[str, Any], node_ids: Set[str]) 
     return references
 
 
-def _get_node_references(node: NodeConfig, allowed_identifiers: Set[str]) -> Set[str]:
+def _get_node_references(node: NodeConfig, allowed_identifiers: set[str]) -> set[str]:
     """Get all node references for a given node.
 
     Args:
@@ -762,7 +786,7 @@ def _get_node_references(node: NodeConfig, allowed_identifiers: Set[str]) -> Set
     Returns:
         Set of node IDs/names that this node references
     """
-    references: Set[str] = set()
+    references: set[str] = set()
 
     # Check formula (for deterministic nodes)
     if node.formula:
@@ -783,14 +807,14 @@ def _get_node_references(node: NodeConfig, allowed_identifiers: Set[str]) -> Set
 
 
 def _validate_edge_semantics(
-    nodes: List[NodeConfig],
-    edges: List[DAGEdge],
-    node_ids: Set[str],
-    context_keys: Set[str],
-    errors: List[str],
-    structured_errors: List[ValidationError],
-    node_lookup: Dict[str, NodeConfig],
-) -> tuple[List[EdgeValidation], List[dict[str, str]]]:
+    nodes: list[NodeConfig],
+    edges: list[DAGEdge],
+    node_ids: set[str],
+    context_keys: set[str],
+    errors: list[str],
+    structured_errors: list[ValidationError],
+    node_lookup: dict[str, NodeConfig],
+) -> tuple[list[EdgeValidation], list[dict[str, str]]]:
     """Validate that node references have corresponding edges.
 
     For each node, checks that all referenced nodes are direct parents (have
@@ -817,15 +841,15 @@ def _validate_edge_semantics(
     var_names = set(var_name_to_id.keys())
 
     # Build parent map: node_id -> set of direct parent identifiers (IDs and var_names)
-    parent_identifiers: Dict[str, Set[str]] = {node.id: set() for node in nodes}
+    parent_identifiers: dict[str, set[str]] = {node.id: set() for node in nodes}
     for edge in edges:
         if edge.target in parent_identifiers and edge.source in id_to_var_name:
             parent_identifiers[edge.target].add(edge.source)
             parent_identifiers[edge.target].add(id_to_var_name[edge.source])
 
     # Track which edges are used (by node_id pairs)
-    used_edges: Set[tuple[str, str]] = set()
-    missing_edges: List[dict[str, str]] = []
+    used_edges: set[tuple[str, str]] = set()
+    missing_edges: list[dict[str, str]] = []
 
     # Precompute combined set of all valid identifiers (node IDs and var_names)
     all_identifiers = node_ids | var_names
@@ -864,7 +888,7 @@ def _validate_edge_semantics(
                     missing_edges.append({"source": source_id, "target": node.id})
 
     # Build edge statuses
-    edge_statuses: List[EdgeValidation] = []
+    edge_statuses: list[EdgeValidation] = []
     for edge in edges:
         edge_tuple = (edge.source, edge.target)
         if edge_tuple in used_edges:

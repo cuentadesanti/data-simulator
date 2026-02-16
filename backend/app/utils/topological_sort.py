@@ -7,13 +7,11 @@ and will detect cycles in the graph.
 
 from __future__ import annotations
 
-from typing import Dict, List, Set
-
 from app.core.exceptions import CycleDetectedError
 from app.models.dag import DAGEdge, NodeConfig
 
 
-def topological_sort(nodes: List[NodeConfig], edges: List[DAGEdge]) -> List[str]:
+def topological_sort(nodes: list[NodeConfig], edges: list[DAGEdge]) -> list[str]:
     """Perform topological sort on DAG nodes.
 
     Returns nodes in topological order where all parent nodes appear before
@@ -46,8 +44,8 @@ def topological_sort(nodes: List[NodeConfig], edges: List[DAGEdge]) -> List[str]
     """
     # Build adjacency list and in-degree map
     node_ids = [node.id for node in nodes]
-    adjacency: Dict[str, List[str]] = {node_id: [] for node_id in node_ids}
-    in_degree: Dict[str, int] = {node_id: 0 for node_id in node_ids}
+    adjacency: dict[str, list[str]] = {node_id: [] for node_id in node_ids}
+    in_degree: dict[str, int] = {node_id: 0 for node_id in node_ids}
 
     # Build the graph
     for edge in edges:
@@ -60,9 +58,9 @@ def topological_sort(nodes: List[NodeConfig], edges: List[DAGEdge]) -> List[str]
 
     # Initialize queue with nodes that have no incoming edges
     # Sort by node_id (lexicographically) for deterministic order regardless of input
-    queue: List[str] = sorted([node_id for node_id in node_ids if in_degree[node_id] == 0])
+    queue: list[str] = sorted([node_id for node_id in node_ids if in_degree[node_id] == 0])
 
-    result: List[str] = []
+    result: list[str] = []
 
     # Process nodes in topological order
     while queue:
@@ -71,7 +69,7 @@ def topological_sort(nodes: List[NodeConfig], edges: List[DAGEdge]) -> List[str]
         result.append(current)
 
         # Collect children whose in-degree becomes 0
-        ready_children: List[str] = []
+        ready_children: list[str] = []
         for child in adjacency[current]:
             in_degree[child] -= 1
             if in_degree[child] == 0:
@@ -93,7 +91,7 @@ def topological_sort(nodes: List[NodeConfig], edges: List[DAGEdge]) -> List[str]
     return result
 
 
-def _find_cycle(nodes: List[str], adjacency: Dict[str, List[str]]) -> List[str]:
+def _find_cycle(nodes: list[str], adjacency: dict[str, list[str]]) -> list[str]:
     """Find a cycle in the remaining unprocessed nodes.
 
     Uses DFS to detect and return the nodes involved in a cycle.
@@ -105,9 +103,9 @@ def _find_cycle(nodes: List[str], adjacency: Dict[str, List[str]]) -> List[str]:
     Returns:
         List of node IDs involved in the cycle
     """
-    visited: Set[str] = set()
-    rec_stack: Set[str] = set()
-    parent: Dict[str, str | None] = {}
+    visited: set[str] = set()
+    rec_stack: set[str] = set()
+    parent: dict[str, str | None] = {}
 
     def dfs(node: str) -> str | None:
         """DFS helper that returns the node where cycle was detected."""

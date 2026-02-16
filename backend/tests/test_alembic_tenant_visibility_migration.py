@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
+from alembic import command
 from app.core.config import settings
 
 OLD_REVISION = "9c1a2f7e4b11"

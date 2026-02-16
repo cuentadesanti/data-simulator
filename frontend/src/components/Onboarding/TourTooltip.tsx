@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { TOUR_Z, type TooltipPosition, type TourMode } from './types';
 
@@ -87,7 +87,12 @@ export const TourTooltip = ({
   onClose,
 }: TourTooltipProps) => {
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const tooltipRect = tooltipRef.current?.getBoundingClientRect() ?? null;
+  const [tooltipRect, setTooltipRect] = useState<DOMRect | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- measure tooltip after render for positioning
+    setTooltipRect(tooltipRef.current?.getBoundingClientRect() ?? null);
+  });
 
   const style = computeTooltipStyle(position, targetRect, floating, tooltipRect);
 

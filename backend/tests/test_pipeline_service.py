@@ -20,7 +20,6 @@ from app.services.pipeline_service import (
 )
 from app.services.transform_registry import get_transform_registry, validate_safe_expression
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================

@@ -10,25 +10,24 @@ import inspect
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Type
+from typing import Any
 
 import numpy as np
 
 # Sklearn imports - Core
-from sklearn.base import BaseEstimator, RegressorMixin
-from sklearn.utils import all_estimators
+from sklearn.base import BaseEstimator
 
 # Sklearn imports - Metrics
 from sklearn.metrics import (
-    mean_absolute_error,
-    mean_squared_error,
-    r2_score,
     explained_variance_score,
     max_error,
+    mean_absolute_error,
     mean_absolute_percentage_error,
+    mean_squared_error,
     median_absolute_error,
+    r2_score,
 )
-
+from sklearn.utils import all_estimators
 
 # =============================================================================
 # Parameter Definitions
@@ -226,7 +225,7 @@ def _get_param_ui_group(param_name: str) -> str:
     return "advanced"
 
 
-def _extract_sklearn_params(estimator_class: Type[BaseEstimator]) -> list[ModelParameter]:
+def _extract_sklearn_params(estimator_class: type[BaseEstimator]) -> list[ModelParameter]:
     """Extract parameters from a sklearn estimator class with enrichment."""
     params = []
     sig = inspect.signature(estimator_class.__init__)
@@ -389,7 +388,7 @@ class SklearnModelType(ModelType):
     
     def __init__(
         self,
-        estimator_class: Type[BaseEstimator],
+        estimator_class: type[BaseEstimator],
         name: str,
         display_name: str,
         task_type: str,
@@ -404,7 +403,7 @@ class SklearnModelType(ModelType):
         self._category = category
     
     @staticmethod
-    def _extract_description(estimator_class: Type[BaseEstimator]) -> str:
+    def _extract_description(estimator_class: type[BaseEstimator]) -> str:
         """Extract a clean description from the estimator's docstring."""
         doc = estimator_class.__doc__ or ""
         # Get first non-empty line
@@ -476,7 +475,7 @@ class SklearnModelType(ModelType):
         if hasattr(model, "coef_"):
             coef_array = np.atleast_1d(model.coef_).flatten()
             if len(coef_array) >= len(feature_names):
-                for name, coef in zip(feature_names, coef_array[:len(feature_names)]):
+                for name, coef in zip(feature_names, coef_array[:len(feature_names)], strict=False):
                     coefs[name] = float(coef)
         
         # Intercept
@@ -488,7 +487,7 @@ class SklearnModelType(ModelType):
         
         # Tree feature importances
         if hasattr(model, "feature_importances_"):
-            for name, imp in zip(feature_names, model.feature_importances_):
+            for name, imp in zip(feature_names, model.feature_importances_, strict=False):
                 coefs[f"{name}_importance"] = float(imp)
         
         return coefs if coefs else None
@@ -882,13 +881,13 @@ def _discover_sklearn_regressors() -> list[dict[str, Any]]:
 class ModelRegistry:
     """Registry of available ML model types with auto-discovery."""
     
-    _instance: "ModelRegistry | None" = None
+    _instance: ModelRegistry | None = None
     
     def __init__(self):
         self._models: dict[str, ModelType] = {}
     
     @classmethod
-    def get_instance(cls) -> "ModelRegistry":
+    def get_instance(cls) -> ModelRegistry:
         if cls._instance is None:
             cls._instance = cls()
             cls._instance._register_defaults()

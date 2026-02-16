@@ -100,21 +100,21 @@ async def require_auth(request: Request) -> dict:
         )
         return payload
 
-    except jwt.ExpiredSignatureError:
+    except jwt.ExpiredSignatureError as e:
         logger.warning("Auth error: Token expired")
-        raise HTTPException(status_code=401, detail="Token has expired")
+        raise HTTPException(status_code=401, detail="Token has expired") from e
 
     except jwt.InvalidTokenError as e:
         logger.error(f"Auth error: Invalid token - {e}")
         # In production, return generic error to avoid leaking details
         detail = "Not authenticated" if settings.environment == "prod" else f"Invalid token: {e}"
-        raise HTTPException(status_code=401, detail=detail)
+        raise HTTPException(status_code=401, detail=detail) from e
 
     except Exception as e:
         logger.exception(f"Auth error: Unexpected exception - {e}")
         # In production, return generic error to avoid leaking implementation details
         detail = "Not authenticated" if settings.environment == "prod" else f"Authentication failed: {str(e)}"
-        raise HTTPException(status_code=401, detail=detail)
+        raise HTTPException(status_code=401, detail=detail) from e
 
 def require_user_id(user: dict[str, Any]) -> str:
     """Extract and validate user ID from auth payload."""

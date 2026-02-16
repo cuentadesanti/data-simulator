@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.db import crud
 from app.models.dag import DAGDefinition
-from app.services.schema_inference import infer_schema_from_df
 from app.services.sampler import _generate_data
+from app.services.schema_inference import infer_schema_from_df
 from app.services.upload_source import load_upload_dataframe
 
 

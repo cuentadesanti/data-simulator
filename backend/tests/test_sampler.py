@@ -507,7 +507,7 @@ class TestReproducibility:
         result2 = generate_preview(dag)
 
         # Results should be identical
-        for r1, r2 in zip(result1.data, result2.data):
+        for r1, r2 in zip(result1.data, result2.data, strict=True):
             assert r1["x"] == r2["x"]
 
     def test_different_seeds_different_results(self):
@@ -532,7 +532,7 @@ class TestReproducibility:
 
         # Results should be different
         different = False
-        for r1, r2 in zip(result1.data, result2.data):
+        for r1, r2 in zip(result1.data, result2.data, strict=True):
             if r1["x"] != r2["x"]:
                 different = True
                 break
@@ -577,7 +577,6 @@ class TestTopoInvarianceE2E:
         """Test that reordering nodes in DAG JSON produces identical output with same seed."""
         import hashlib
         import json
-        import random
 
         def make_dag_with_node_order(node_order):
             """Create DAG with nodes in specified order."""
@@ -645,7 +644,7 @@ class TestTopoInvarianceE2E:
 
         # All results should have identical hash
         first_hash = results[0][1]
-        for order, data_hash, data in results:
+        for order, data_hash, _data in results:
             assert data_hash == first_hash, (
                 f"Output differs for node order {order}. "
                 f"Expected hash {first_hash}, got {data_hash}"

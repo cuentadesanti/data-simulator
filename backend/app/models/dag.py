@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -50,7 +50,7 @@ class MappingValue(BaseModel):
 
 # ParamValue: strict typing without ambiguity
 ParamValue = Annotated[
-    Union[float, int, str, LookupValue, MappingValue],
+    float | int | str | LookupValue | MappingValue,
     Field(
         description=(
             "Parameter value: literal number, expression string, LookupValue, or MappingValue"
@@ -88,7 +88,7 @@ class PostProcessing(BaseModel):
     missing_rate: float | None = Field(None, ge=0, le=1, description="Missing value rate (MCAR)")
 
     @model_validator(mode="after")
-    def validate_clip_range(self) -> "PostProcessing":
+    def validate_clip_range(self) -> PostProcessing:
         """Ensure clip_min <= clip_max if both are set."""
         if self.clip_min is not None and self.clip_max is not None:
             if self.clip_min > self.clip_max:
@@ -178,7 +178,7 @@ class NodeConfig(BaseModel):
         return result or "unnamed"
 
     @model_validator(mode="after")
-    def validate_mece(self) -> "NodeConfig":
+    def validate_mece(self) -> NodeConfig:
         """Ensure MECE: stochastic has distribution, deterministic has formula."""
         if self.kind == "stochastic":
             if self.distribution is None:
@@ -193,7 +193,7 @@ class NodeConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_group_by(self) -> "NodeConfig":
+    def validate_group_by(self) -> NodeConfig:
         """Validate group_by is only set for group scope."""
         if self.scope == "group" and self.group_by is None:
             raise ValueError("Nodes with scope='group' must specify group_by")
@@ -237,7 +237,7 @@ class Constraint(BaseModel):
     operator: ComparisonOperator | None = Field(None, description="Comparison operator")
 
     @model_validator(mode="after")
-    def validate_constraint_params(self) -> "Constraint":
+    def validate_constraint_params(self) -> Constraint:
         """Validate constraint has required params for its type."""
         if self.type == "comparison":
             if self.other is None or self.operator is None:

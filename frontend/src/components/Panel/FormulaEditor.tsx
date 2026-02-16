@@ -86,6 +86,7 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
   // Reset editing state and update display from canonical
   useEffect(() => {
     isEditingRef.current = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync display from canonical on external changes
     setDisplayFormula(toDisplay(canonicalFormula, idToVarName));
   }, [canonicalFormula, nodeId, idToVarName]);
 
@@ -221,6 +222,7 @@ export const FormulaEditor: React.FC<FormulaEditorProps> = ({ nodeId }) => {
   // Validate formula on change
   useEffect(() => {
     const errors = validateFormula(displayFormula);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- derived validation state synced from formula changes
     setValidationErrors(errors);
     setIsValid(errors.length === 0 && displayFormula.trim().length > 0);
   }, [displayFormula, validateFormula]);
