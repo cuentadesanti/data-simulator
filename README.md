@@ -1,6 +1,15 @@
 # Data Simulator
 
-A visual tool for generating synthetic datasets from probabilistic DAG (Directed Acyclic Graph) models. Build your data model visually with React Flow, configure probability distributions, and generate datasets via forward sampling.
+A visual playground for probabilistic and causal modeling. Build a DAG of stochastic and deterministic nodes, attach distributions (or formulas) to each, and generate synthetic datasets via forward sampling. Designed primarily as a teaching and exploration tool for thinking about generative processes, causal structure, and how data mechanisms shape observed distributions.
+
+![Data Simulator UI](docs/screenshot.png)
+<!-- TODO: replace with an actual screenshot/GIF of a small DAG and the resulting data preview. -->
+
+## Why
+
+Probabilistic graphical models, structural causal models, and Bayesian network thinking all rely on the same building block: a DAG over variables, each with its own conditional mechanism. Reasoning about these on paper is hard; reasoning about them when you can drag, edit, and *re-sample* is much easier. This project exists to make that loop fast — change a distribution, change an edge, regenerate, see the marginals shift.
+
+Useful for: teaching probability and causal inference; sanity-checking analytical pipelines on data with a known generating process; exploring assumptions before committing to a real-data study.
 
 ## Features
 
