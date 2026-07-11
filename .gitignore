@@ -79,3 +79,7 @@ Thumbs.db
 tmp/
 temp/
 .claude/
+
+artifacts/
+backend/uploads/
+test-results/
